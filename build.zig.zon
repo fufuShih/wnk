@@ -1,0 +1,20 @@
+.{
+    .name = .wnk,
+    .version = "0.0.0",
+    .fingerprint = 0x8fe1593ebc6eb114, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .dvui = .{
+            .url = "https://github.com/david-vanderson/dvui/archive/refs/heads/main.tar.gz",
+            .hash = "dvui-0.4.0-dev-AQFJmYgA2gA28mpJHWq_1asWXpEwT6fHgZBsu_JPzlh4",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        // For example...
+        //"LICENSE",
+        //"README.md",
+    },
+}
