@@ -46,6 +46,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.root_module.addImport("dvui", dvui_dep.module("dvui_sdl3"));
+    exe.root_module.addImport("sdl-backend", dvui_dep.module("sdl3"));
     // For windows
     exe.linkLibC();
 

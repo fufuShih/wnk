@@ -1,5 +1,6 @@
 const std = @import("std");
 const dvui = @import("dvui");
+const SDLBackend = @import("sdl-backend");
 
 // Search buffer for the input field
 var search_buffer: [256]u8 = undefined;
@@ -45,7 +46,26 @@ pub const std_options: std.Options = .{
 
 // Executed before the first frame, after backend and dvui.Window.init()
 pub fn AppInit(win: *dvui.Window) !void {
-    _ = win;
+    // Get the SDL window directly from backend.impl
+    const sdl_window = win.backend.impl.window;
+
+    // Set borderless window (no title bar or window frame)
+    _ = SDLBackend.c.SDL_SetWindowBordered(sdl_window, false);
+
+    // Set window to always stay on top
+    _ = SDLBackend.c.SDL_SetWindowAlwaysOnTop(sdl_window, true);
+
+    // Set window opacity (0.0 = fully transparent, 1.0 = fully opaque)
+    // 0.95 gives a subtle transparency effect like Raycast
+    _ = SDLBackend.c.SDL_SetWindowOpacity(sdl_window, 0.95);
+
+    // Center the window on screen
+    _ = SDLBackend.c.SDL_SetWindowPosition(
+        sdl_window,
+        SDLBackend.c.SDL_WINDOWPOS_CENTERED,
+        SDLBackend.c.SDL_WINDOWPOS_CENTERED,
+    );
+
     // Initialize search buffer
     @memset(&search_buffer, 0);
     search_initialized = true;
