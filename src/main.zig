@@ -6,7 +6,6 @@ const SDLBackend = @import("sdl-backend");
 const state = @import("state.zig");
 const keyboard = @import("ui/keyboard.zig");
 const search = @import("ui/search.zig");
-const results = @import("ui/results.zig");
 const panels = @import("ui/panels.zig");
 const commands = @import("ui/commands.zig");
 const floating_action_panel = @import("ui/floating_action_panel.zig");
@@ -106,16 +105,16 @@ pub fn AppFrame() !dvui.App.Result {
     // The top area is either the search box (main panel) or a panel hint.
     const top_mode: state.PanelMode = if (state.panel_mode == .action) state.prev_panel_mode else state.panel_mode;
     if (top_mode == .main) {
-        try search.render();
+        try search.renderSearch();
     } else {
-        panels.renderTop(top_mode, results.getSelectedItem());
+        panels.renderTop(top_mode, search.getSelectedItem());
     }
 
     // Execute command selected in command panel (triggered by Enter in keyboard handler).
     if (state.command_execute) {
         state.command_execute = false;
 
-        const sel = results.getSelectedItem();
+        const sel = search.getSelectedItem();
         const cmd = commands.getCommand(state.command_selected_index);
 
         if (cmd != null and sel != null) {
@@ -191,11 +190,11 @@ pub fn AppFrame() !dvui.App.Result {
 
     // Base content
     switch (base_mode) {
-        .main => try results.render(),
-        .list => try panels.renderList(results.getSelectedItem()),
-        .sub => try panels.renderSub(results.getSelectedItem()),
-        .command => try panels.renderCommand(results.getSelectedItem()),
-        .action => try results.render(),
+        .main => try search.renderResults(),
+        .list => try panels.renderList(search.getSelectedItem()),
+        .sub => try panels.renderSub(search.getSelectedItem()),
+        .command => try panels.renderCommand(search.getSelectedItem()),
+        .action => try search.renderResults(),
     }
 
     // Action panel: bottom-right, above base content.
@@ -207,7 +206,7 @@ pub fn AppFrame() !dvui.App.Result {
         });
         defer anchor.deinit();
 
-        try floating_action_panel.render(results.getSelectedItem());
+        try floating_action_panel.render(search.getSelectedItem());
     }
 
     return .ok;

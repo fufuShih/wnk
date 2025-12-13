@@ -1,10 +1,10 @@
 const dvui = @import("dvui");
 const state = @import("../state.zig");
-const results = @import("results.zig");
+const search = @import("search.zig");
 const ui = @import("components.zig");
 const cmds = @import("commands.zig");
 
-fn renderSelectedHeader(sel: ?results.SelectedItem) void {
+fn renderSelectedHeader(sel: ?search.SelectedItem) void {
     var box = ui.beginCard(.{ .margin = .{ .x = 20, .y = 0, .w = 20, .h = 10 } });
     defer box.deinit();
 
@@ -25,11 +25,11 @@ fn renderSelectedHeader(sel: ?results.SelectedItem) void {
     }
 }
 
-pub fn renderSub(sel: ?results.SelectedItem) !void {
+pub fn renderSub(sel: ?search.SelectedItem) !void {
     renderSelectedHeader(sel);
 }
 
-pub fn renderCommand(sel: ?results.SelectedItem) !void {
+pub fn renderCommand(sel: ?search.SelectedItem) !void {
     renderSelectedHeader(sel);
 
     // Clamp selection
@@ -52,12 +52,12 @@ pub fn renderCommand(sel: ?results.SelectedItem) !void {
     }
 }
 
-pub fn renderList(sel: ?results.SelectedItem) !void {
+pub fn renderList(sel: ?search.SelectedItem) !void {
     // Details content belongs to the main panel area.
     renderSelectedHeader(sel);
 }
 
-pub fn renderTop(mode: state.PanelMode, sel: ?results.SelectedItem) void {
+pub fn renderTop(mode: state.PanelMode, sel: ?search.SelectedItem) void {
     if (mode == .main or mode == .action) return;
 
     const list_title: []const u8 = if (sel) |s| switch (s) {

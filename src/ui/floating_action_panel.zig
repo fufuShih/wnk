@@ -1,10 +1,10 @@
 const dvui = @import("dvui");
 const state = @import("../state.zig");
-const results = @import("results.zig");
+const search = @import("search.zig");
 const ui = @import("components.zig");
 const cmds = @import("commands.zig");
 
-pub fn render(sel: ?results.SelectedItem) !void {
+pub fn render(sel: ?search.SelectedItem) !void {
     // Clamp selection
     if (cmds.commands.len > 0 and state.command_selected_index >= cmds.commands.len) {
         state.command_selected_index = cmds.commands.len - 1;
