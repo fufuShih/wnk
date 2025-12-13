@@ -1,0 +1,13 @@
+{
+  "name": "@wink/sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  }
+}

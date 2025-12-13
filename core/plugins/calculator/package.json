@@ -1,0 +1,12 @@
+{
+  "name": "@wink/plugin-calculator",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/bundle.js",
+  "scripts": {
+    "build": "bun build src/index.tsx --outfile dist/bundle.js --external react"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  }
+}
