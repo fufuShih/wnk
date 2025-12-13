@@ -1,262 +1,87 @@
-// ============================================
-// wnk Reconciler
-// Custom React Reconciler using react-reconciler
-// Inspired by Ink's architecture
-// ============================================
-
 import ReactReconciler from 'react-reconciler';
 import { DefaultEventPriority } from 'react-reconciler/constants';
 import { wnkNode, wnkRoot, mapElementType } from './host-tree';
 
-// The container type (root of our tree)
 type Container = wnkRoot;
 type Instance = wnkNode;
-type TextInstance = wnkNode;
-type ChildSet = never;
-type PublicInstance = wnkNode;
-type HostContext = Record<string, never>;
-type UpdatePayload = Record<string, unknown>;
-type TimeoutHandle = ReturnType<typeof setTimeout>;
-type NoTimeout = -1;
-type SuspenseInstance = never;
+type Props = Record<string, unknown>;
 
-// Callback to notify when tree updates
 let onTreeUpdate: ((root: wnkRoot) => void) | null = null;
+export function setTreeUpdateCallback(cb: (root: wnkRoot) => void): void { onTreeUpdate = cb; }
 
-export function setTreeUpdateCallback(callback: (root: wnkRoot) => void): void {
-  onTreeUpdate = callback;
+function isTextChild(v: unknown): v is string | number {
+  return typeof v === 'string' || typeof v === 'number';
 }
 
-// Host config for react-reconciler
 const hostConfig: ReactReconciler.HostConfig<
-  string,               // Type
-  Record<string, unknown>, // Props
-  Container,
-  Instance,
-  TextInstance,
-  SuspenseInstance,
-  never,               // HydratableInstance
-  PublicInstance,
-  HostContext,
-  UpdatePayload,
-  ChildSet,
-  TimeoutHandle,
-  NoTimeout
+  string, Props, Container, Instance, Instance, never, never, Instance,
+  Record<string, never>, Props, never, ReturnType<typeof setTimeout>, -1
 > = {
-  // ============ Core Methods ============
-
-  createInstance(
-    type: string,
-    props: Record<string, unknown>,
-    rootContainer: Container
-  ): Instance {
-    const componentType = mapElementType(type);
-    const node = new wnkNode(componentType, props);
-
-    // Capture inline text children (React may not create a TextInstance when
-    // shouldSetTextContent() is true).
-    const children = props.children;
-    if (typeof children === 'string' || typeof children === 'number') {
-      node.text = String(children);
-    }
-
-    // Register event handlers
-    if (props.onPress && typeof props.onPress === 'function') {
-      rootContainer.registerHandler(node.id, 'onPress', props.onPress as () => void);
-    }
-    if (props.onChange && typeof props.onChange === 'function') {
-      rootContainer.registerHandler(node.id, 'onChange', props.onChange as (...args: unknown[]) => void);
-    }
-
+  createInstance(type: string, props: Props, root: Container): Instance {
+    const node = new wnkNode(mapElementType(type), props);
+    if (isTextChild(props.children)) node.text = String(props.children);
+    if (typeof props.onPress === 'function') root.registerHandler(node.id, 'onPress', props.onPress as () => void);
+    if (typeof props.onChange === 'function') root.registerHandler(node.id, 'onChange', props.onChange as (...a: unknown[]) => void);
     return node;
   },
 
-  createTextInstance(
-    text: string,
-    _rootContainer: Container
-  ): TextInstance {
+  createTextInstance(text: string): Instance {
     const node = new wnkNode('Text', {});
     node.text = text;
     return node;
   },
 
-  appendInitialChild(parentInstance: Instance, child: Instance | TextInstance): void {
-    parentInstance.appendChild(child);
+  appendInitialChild: (p, c) => p.appendChild(c),
+  appendChild: (p, c) => p.appendChild(c),
+  appendChildToContainer: (c, child) => { c.setChild(child); onTreeUpdate?.(c); },
+  insertBefore: (p, c, before) => p.insertBefore(c, before),
+  insertInContainerBefore: (c, child) => { c.setChild(child); onTreeUpdate?.(c); },
+  removeChild: (p, c) => p.removeChild(c),
+  removeChildFromContainer: (c, child) => {
+    if (c.child === child) { c.unregisterHandlers(child.id); c.setChild(null); }
+    onTreeUpdate?.(c);
   },
 
-  appendChild(parentInstance: Instance, child: Instance | TextInstance): void {
-    parentInstance.appendChild(child);
-  },
-
-  appendChildToContainer(container: Container, child: Instance): void {
-    container.setChild(child);
-    onTreeUpdate?.(container);
-  },
-
-  insertBefore(
-    parentInstance: Instance,
-    child: Instance | TextInstance,
-    beforeChild: Instance | TextInstance
-  ): void {
-    parentInstance.insertBefore(child, beforeChild);
-  },
-
-  insertInContainerBefore(
-    container: Container,
-    child: Instance,
-    _beforeChild: Instance
-  ): void {
-    container.setChild(child);
-    onTreeUpdate?.(container);
-  },
-
-  removeChild(parentInstance: Instance, child: Instance | TextInstance): void {
-    parentInstance.removeChild(child);
-  },
-
-  removeChildFromContainer(container: Container, child: Instance): void {
-    if (container.child === child) {
-      container.unregisterHandlers(child.id);
-      container.setChild(null);
-    }
-    onTreeUpdate?.(container);
-  },
-
-  // ============ Update Methods ============
-
-  prepareUpdate(
-    _instance: Instance,
-    _type: string,
-    oldProps: Record<string, unknown>,
-    newProps: Record<string, unknown>
-  ): UpdatePayload | null {
-    const updatePayload: UpdatePayload = {};
-    let hasChanges = false;
-
-    // Check for changed props
-    for (const key of Object.keys(newProps)) {
-      if (key === 'children') {
-        const oldChildren = oldProps.children;
-        const newChildren = newProps.children;
-        const oldIsText = typeof oldChildren === 'string' || typeof oldChildren === 'number';
-        const newIsText = typeof newChildren === 'string' || typeof newChildren === 'number';
-
-        if ((oldIsText || newIsText) && oldChildren !== newChildren) {
-          // Keep as internal prop; host-tree won't serialize 'children'.
-          updatePayload.children = newChildren;
-          hasChanges = true;
+  prepareUpdate(_i, _t, oldP: Props, newP: Props): Props | null {
+    const payload: Props = {};
+    let changed = false;
+    for (const k of Object.keys(newP)) {
+      if (k === 'children') {
+        if ((isTextChild(oldP.children) || isTextChild(newP.children)) && oldP.children !== newP.children) {
+          payload.children = newP.children; changed = true;
         }
-        continue;
-      }
-      if (oldProps[key] !== newProps[key]) {
-        updatePayload[key] = newProps[key];
-        hasChanges = true;
-      }
+      } else if (oldP[k] !== newP[k]) { payload[k] = newP[k]; changed = true; }
     }
-
-    // Check for removed props
-    for (const key of Object.keys(oldProps)) {
-      if (key === 'children') {
-        const oldChildren = oldProps.children;
-        const newChildren = newProps.children;
-        const oldIsText = typeof oldChildren === 'string' || typeof oldChildren === 'number';
-        const newIsText = typeof newChildren === 'string' || typeof newChildren === 'number';
-
-        if ((oldIsText || newIsText) && oldChildren !== newChildren) {
-          updatePayload.children = newChildren;
-          hasChanges = true;
-        }
-        continue;
-      }
-      if (!(key in newProps)) {
-        updatePayload[key] = undefined;
-        hasChanges = true;
-      }
+    for (const k of Object.keys(oldP)) {
+      if (k === 'children') continue;
+      if (!(k in newP)) { payload[k] = undefined; changed = true; }
     }
-
-    return hasChanges ? updatePayload : null;
+    return changed ? payload : null;
   },
 
-  commitUpdate(
-    instance: Instance,
-    updatePayload: UpdatePayload,
-    _type: string,
-    _prevProps: Record<string, unknown>,
-    nextProps: Record<string, unknown>
-  ): void {
-    instance.updateProps(updatePayload);
-
-    const children = nextProps.children;
-    if (typeof children === 'string' || typeof children === 'number') {
-      instance.text = String(children);
-    } else {
-      instance.text = null;
-    }
+  commitUpdate(inst, _payload, _t, _prev, next: Props): void {
+    inst.updateProps(_payload);
+    inst.text = isTextChild(next.children) ? String(next.children) : null;
   },
 
-  commitTextUpdate(
-    textInstance: TextInstance,
-    _oldText: string,
-    newText: string
-  ): void {
-    textInstance.text = newText;
-  },
-
-  // ============ Finalization ============
-
-  finalizeInitialChildren(): boolean {
-    return false;
-  },
-
-  prepareForCommit(): Record<string, unknown> | null {
-    return null;
-  },
-
-  resetAfterCommit(container: Container): void {
-    onTreeUpdate?.(container);
-  },
-
-  // ============ Host Context ============
-
-  getRootHostContext(): HostContext {
-    return {};
-  },
-
-  getChildHostContext(): HostContext {
-    return {};
-  },
-
-  // ============ Misc ============
-
-  getPublicInstance(instance: Instance): PublicInstance {
-    return instance;
-  },
-
-  shouldSetTextContent(_type: string, props: Record<string, unknown>): boolean {
-    // Text nodes for string children
-    return typeof props.children === 'string' || typeof props.children === 'number';
-  },
-
-  clearContainer(container: Container): void {
-    if (container.child) {
-      container.unregisterHandlers(container.child.id);
-    }
-    container.setChild(null);
-  },
-
-  // ============ Scheduling ============
+  commitTextUpdate: (t, _o, n) => { t.text = n; },
+  finalizeInitialChildren: () => false,
+  prepareForCommit: () => null,
+  resetAfterCommit: (c) => onTreeUpdate?.(c),
+  getRootHostContext: () => ({}),
+  getChildHostContext: () => ({}),
+  getPublicInstance: (i) => i,
+  shouldSetTextContent: (_t, p) => isTextChild(p.children),
+  clearContainer: (c) => { if (c.child) c.unregisterHandlers(c.child.id); c.setChild(null); },
 
   supportsMutation: true,
   supportsPersistence: false,
   supportsHydration: false,
-
   isPrimaryRenderer: true,
   warnsIfNotActing: true,
-
   scheduleTimeout: setTimeout,
   cancelTimeout: clearTimeout,
-  noTimeout: -1 as NoTimeout,
-
+  noTimeout: -1 as -1,
   getCurrentEventPriority: () => DefaultEventPriority,
   getInstanceFromNode: () => null,
   beforeActiveInstanceBlur: () => {},
@@ -264,21 +89,10 @@ const hostConfig: ReactReconciler.HostConfig<
   prepareScopeUpdate: () => {},
   getInstanceFromScope: () => null,
   detachDeletedInstance: () => {},
-
-  // Required methods
   preparePortalMount: () => {},
-
-  // Microtask support
   supportsMicrotasks: true,
   scheduleMicrotask: queueMicrotask,
 };
 
-// Create the reconciler
 export const wnkReconciler = ReactReconciler(hostConfig);
-
-// Enable concurrent features
-wnkReconciler.injectIntoDevTools({
-  bundleType: 1, // 0 for production, 1 for development
-  version: '0.1.0',
-  rendererPackageName: 'wnk-reconciler',
-});
+wnkReconciler.injectIntoDevTools({ bundleType: 1, version: '0.1.0', rendererPackageName: 'wnk-reconciler' });

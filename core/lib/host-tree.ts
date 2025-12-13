@@ -1,24 +1,10 @@
-// ============================================
-// Host Tree - Virtual DOM for wnk
-// Pure JS objects representing the UI tree
-// ============================================
+import type { ComponentType, SerializedNode } from '../sdk/types';
 
-import type { ComponentType, SerializedNode, Style } from '../sdk/types';
-
-// Internal node ID counter
 let nodeIdCounter = 0;
-
-// Generate unique node ID
-function generateNodeId(): string {
-  return `node_${++nodeIdCounter}`;
-}
-
-// Props that should not be serialized
 const INTERNAL_PROPS = new Set(['children', 'key', 'ref']);
 
-// wnkNode - represents a node in the virtual tree
 export class wnkNode {
-  public readonly id: string;
+  public readonly id = `node_${++nodeIdCounter}`;
   public type: ComponentType;
   public props: Record<string, unknown>;
   public children: wnkNode[] = [];
@@ -26,120 +12,66 @@ export class wnkNode {
   public text: string | null = null;
 
   constructor(type: ComponentType, props: Record<string, unknown> = {}) {
-    this.id = generateNodeId();
     this.type = type;
     this.props = props;
   }
 
-  // Append a child node
   appendChild(child: wnkNode): void {
     child.parent = this;
     this.children.push(child);
   }
 
-  // Insert child before another child
   insertBefore(child: wnkNode, beforeChild: wnkNode): void {
     child.parent = this;
-    const index = this.children.indexOf(beforeChild);
-    if (index >= 0) {
-      this.children.splice(index, 0, child);
-    } else {
-      this.children.push(child);
-    }
+    const idx = this.children.indexOf(beforeChild);
+    idx >= 0 ? this.children.splice(idx, 0, child) : this.children.push(child);
   }
 
-  // Remove a child node
   removeChild(child: wnkNode): void {
-    const index = this.children.indexOf(child);
-    if (index >= 0) {
-      this.children.splice(index, 1);
-      child.parent = null;
-    }
+    const idx = this.children.indexOf(child);
+    if (idx >= 0) { this.children.splice(idx, 1); child.parent = null; }
   }
 
-  // Update props
   updateProps(newProps: Record<string, unknown>): void {
     this.props = { ...this.props, ...newProps };
   }
 
-  // Serialize to JSON-friendly object
   serialize(): SerializedNode {
-    // Filter out internal props and functions
-    const serializedProps: Record<string, unknown> = {};
-
+    const serializedProps: Record<string, unknown> = { _nodeId: this.id };
     for (const [key, value] of Object.entries(this.props)) {
-      if (INTERNAL_PROPS.has(key)) continue;
+      if (INTERNAL_PROPS.has(key) || typeof value === 'symbol') continue;
       if (typeof value === 'function') {
-        // Mark as having event handler, but don't serialize the function
-        serializedProps[`_has${key.charAt(0).toUpperCase() + key.slice(1)}`] = true;
-        continue;
+        serializedProps[`_has${key[0].toUpperCase()}${key.slice(1)}`] = true;
+      } else {
+        serializedProps[key] = value;
       }
-      if (typeof value === 'symbol') continue;
-      serializedProps[key] = value;
     }
-
-    // Add node ID for event targeting
-    serializedProps._nodeId = this.id;
-
-    // Handle text content
-    if (this.text !== null) {
-      serializedProps.value = this.text;
-    }
-
-    return {
-      type: this.type,
-      props: serializedProps,
-      children: this.children.map(child => child.serialize()),
-    };
+    if (this.text !== null) serializedProps.value = this.text;
+    return { type: this.type, props: serializedProps, children: this.children.map(c => c.serialize()) };
   }
 }
 
-// Root container - special node that holds the tree
 export class wnkRoot {
   public child: wnkNode | null = null;
-  private eventHandlers = new Map<string, Map<string, (...args: unknown[]) => void>>();
+  private handlers = new Map<string, Map<string, (...args: unknown[]) => void>>();
 
-  // Set the root child
-  setChild(node: wnkNode | null): void {
-    this.child = node;
+  setChild(node: wnkNode | null): void { this.child = node; }
+
+  registerHandler(nodeId: string, event: string, handler: (...args: unknown[]) => void): void {
+    if (!this.handlers.has(nodeId)) this.handlers.set(nodeId, new Map());
+    this.handlers.get(nodeId)!.set(event, handler);
   }
 
-  // Register an event handler for a node
-  registerHandler(nodeId: string, eventName: string, handler: (...args: unknown[]) => void): void {
-    if (!this.eventHandlers.has(nodeId)) {
-      this.eventHandlers.set(nodeId, new Map());
-    }
-    this.eventHandlers.get(nodeId)!.set(eventName, handler);
+  unregisterHandlers(nodeId: string): void { this.handlers.delete(nodeId); }
+
+  dispatchEvent(nodeId: string, event: string, payload?: unknown): void {
+    this.handlers.get(nodeId)?.get(event)?.(payload);
   }
 
-  // Unregister handlers for a node
-  unregisterHandlers(nodeId: string): void {
-    this.eventHandlers.delete(nodeId);
-  }
-
-  // Dispatch an event from host
-  dispatchEvent(nodeId: string, eventName: string, payload?: unknown): void {
-    const nodeHandlers = this.eventHandlers.get(nodeId);
-    const handler = nodeHandlers?.get(eventName);
-    if (handler) {
-      handler(payload);
-    }
-  }
-
-  // Serialize the entire tree
-  serialize(): SerializedNode | null {
-    return this.child?.serialize() ?? null;
-  }
+  serialize(): SerializedNode | null { return this.child?.serialize() ?? null; }
 }
 
-// Map component element types to our ComponentType
-export function mapElementType(type: string): ComponentType {
-  const typeMap: Record<string, ComponentType> = {
-    'wnk-box': 'Box',
-    'wnk-text': 'Text',
-    'wnk-button': 'Button',
-    'wnk-input': 'Input',
-  };
-
-  return typeMap[type] ?? 'Box';
-}
+const TYPE_MAP: Record<string, ComponentType> = {
+  'wnk-box': 'Box', 'wnk-text': 'Text', 'wnk-button': 'Button', 'wnk-input': 'Input'
+};
+export function mapElementType(type: string): ComponentType { return TYPE_MAP[type] ?? 'Box'; }
