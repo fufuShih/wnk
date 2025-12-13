@@ -1,87 +1,89 @@
 
 # Zig Host (src)
 
-This folder contains the Zig application (the host UI).
+Zig host UI for the WNK launcher.
 
-- `main.zig`: frame loop, panel composition, command execution side effects, and IPC polling.
-- `ui/`: immediate-mode UI modules (search/results/panels/overlays/components).
-- `plugin/ipc.zig`: manages the Bun child process and reads/writes JSON messages.
+## File Structure
 
-## UI Architecture
+```
+src/
+├── main.zig      - App initialization, render loop, plugin lifecycle
+├── plugin.zig    - Bun IPC (stdin/stdout JSON protocol)
+├── state.zig     - Global state
+└── ui/
+    ├── search.zig                 - Search input + results list
+    ├── keyboard.zig               - Event handling & navigation
+    ├── panels.zig                 - Panel rendering (list/sub/command)
+    ├── floating_action_panel.zig  - Floating action menu
+    ├── commands.zig               - Command definitions
+    └── components.zig             - Reusable UI helpers
+```
 
-The host UI is composed from three conceptual regions:
+## Core Architecture
 
-1) **Top header region** (where the search normally is)
-- Main panel: renders the search box.
-- Non-main panels: renders a panel header (title + selected item header when relevant) and then a short hint block.
+### Plugin System ([plugin.zig](plugin.zig))
 
-2) **Base content region**
-- Main panel: renders the results list.
-- List/Sub/Command panels: render panel-specific content.
+**BunProcess** manages stdin/stdout JSON IPC:
 
-3) **Overlays**
-- The action panel is an overlay (floating popout) anchored to the bottom-right. It does not affect layout.
+Host → Bun:
+- `{ type: "query", text: "..." }`
+- `{ type: "command", name: "...", text: "..." }`
+- `{ type: "event", name: "..." }`
 
-### Rendering Flow
+Bun → Host:
+- `{ type: "results", items: [...] }`
+- `{ type: "effect", name: "...", text: "..." }`
 
-- `main.zig` decides the current `top_mode` as:
-	- if `panel_mode == .action` then `top_mode = prev_panel_mode` (so the header matches the underlying panel)
-	- otherwise `top_mode = panel_mode`
-- The base panel is rendered inside an overlay container, then the action overlay is rendered on top when active.
+Methods: `spawn()`, `pollLine()` (non-blocking via `PeekNamedPipe`), `sendQuery()`, `sendCommand()`, `sendEvent()`
 
-## Components & Modules
+### State ([state.zig](state.zig))
 
-- `ui/components.zig`: shared UI primitives
-	- `beginCard(...)`: standard card container (padding/margins/corners)
-	- `heading(...)`: panel heading text
-	- `headerTitle(...)` / `headerSubtitle(...)`: selected-item header typography
-	- `optionRow(...)`: selectable row styling used by popout menus
+Panel modes: `main`, `list`, `sub`, `command`, `action`
 
-- `ui/panels.zig`: panel rendering (non-overlay)
-	- `renderTop(mode, selected)`: draws the top header region for non-main panels
-	- `renderList(...)`: list panel body (currently minimal; header is in the top region)
-	- `renderSub(...)`, `renderCommand(...)`: panel bodies
+Key fields: `search_text`, `plugin_results`, `selected_index`, `focus_on_results`, `panel_mode`
 
-- `ui/floating_action_panel.zig`: the floating action menu (overlay content)
-	- Anchored bottom-right by `main.zig`.
-	- Uses `ui.optionRow` for selection styling.
+### Main Loop ([main.zig](main.zig))
 
-- `ui/commands.zig`: command catalog shared by command/action UIs and execution.
+Window: 700×500px, borderless, 0.95 opacity, always on top (SDL3 + dvui)
 
-- `ui/search.zig` / `ui/results.zig`: search input and results list.
+Render loop: keyboard events → header → execute commands → send queries → poll Bun → render panels → floating overlay
 
-## Formatting & Conventions
+## UI Layout
 
-- **Keep panel bodies simple.** Prefer putting “context” (title + selected item header + hints) in the top header region so panels don’t duplicate it.
-- **Use shared primitives** from `ui/components.zig` for consistent spacing/typography.
-- **Overlays never change layout.** Floating menus (like action) must render in an overlay container and be anchored.
-- **State-driven UI only.** Rendering reads from `state.zig`; side effects (command execution / IPC) live in `main.zig`.
+### Top Header
+- **Main:** search box
+- **Others:** panel title + selected item + hints
+
+### Content
+- **Main:** results list (plugin + mock, real-time filtered)
+- **List/Sub/Command:** respective panel content
+
+### Overlay
+- **Action:** floating menu (bottom-right, W/S navigation)
+
+Render order: header → content → floating overlay (if active)
 
 ## Panels
 
-The host is panel-based. Some panels show the search box; others replace it.
+| Mode | Description | Enter | K | ESC |
+|------|-------------|-------|---|-----|
+| main | Search + results | Open list | Action overlay | Exit (if search focused) |
+| list | Item details | Action overlay | Action overlay | → main |
+| sub | Sub-navigation | - | Action overlay | → main |
+| command | Command selection | Execute | - | → main |
+| action | Floating overlay | Execute | - | → prev panel |
 
-- **Main panel**: search box (top) + results list (below)
-- **List panel**: replaces the search box with a heading + item header (actions are a floating overlay)
-- **Action panel**: a floating overlay anchored to the bottom-right
+**Navigation:** Tab (toggle search/results), W/S (navigate), Enter (activate), K (actions), ESC (back)
 
-When not in the main panel, the host uses the top (search) area as a single header bar:
+## Plugin Flow
 
-- Left: a back-arrow title (e.g. "< Calendar")
-- Right: one condensed hint string
+1. Type query → 2. Send to Bun → 3. Receive results → 4. Update state → 5. Select item → 6. Open list → 7. Press K → 8. Select action → 9. Send command → 10. Receive effect → 11. Apply
 
-## Keyboard behavior
+## Conventions
 
-- `Tab`: toggle focus between search and results (main panel only)
-- `W/S`: move selection in results (main) or the action/command popout menus
-- `Enter`:
-	- From search: moves focus into results.
-	- From results: opens the list panel for the selected item.
-	- From list: opens the action panel overlay.
-	- From action/command: executes the selected command.
-- `Esc`:
-	- From list/sub/command: returns to the main panel.
-	- From action panel: returns to the previous panel.
-- `k`: opens the action panel overlay (when on main results or sub panel)
-- `k` also opens the action panel overlay from the list panel
+- Context in header, not panel body
+- Use [ui/components.zig](ui/components.zig) for consistency
+- Overlays use absolute positioning
+- State-driven rendering only
+- Non-blocking I/O via `PeekNamedPipe`
 
