@@ -8,6 +8,8 @@ const keyboard = @import("ui/keyboard.zig");
 const search = @import("ui/search.zig");
 const results = @import("ui/results.zig");
 const panels = @import("ui/panels.zig");
+const commands = @import("ui/commands.zig");
+const floating_action_panel = @import("ui/floating_action_panel.zig");
 const plugin = @import("plugin.zig");
 
 var last_query_hash: u64 = 0;
@@ -101,14 +103,20 @@ pub fn AppFrame() !dvui.App.Result {
 
     // Keep the base Wink layout always visible
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 20 } });
-    try search.render();
+    // The top area is either the search box (main panel) or a panel hint.
+    const top_mode: state.PanelMode = if (state.panel_mode == .action) state.prev_panel_mode else state.panel_mode;
+    if (top_mode == .main) {
+        try search.render();
+    } else {
+        panels.renderTop(top_mode, results.getSelectedItem());
+    }
 
     // Execute command selected in command panel (triggered by Enter in keyboard handler).
     if (state.command_execute) {
         state.command_execute = false;
 
         const sel = results.getSelectedItem();
-        const cmd = panels.getCommand(state.command_selected_index);
+        const cmd = commands.getCommand(state.command_selected_index);
 
         if (cmd != null and sel != null) {
             const text_for_command: []const u8 = switch (sel.?) {
@@ -175,11 +183,31 @@ pub fn AppFrame() !dvui.App.Result {
     _ = dvui.separator(@src(), .{ .expand = .horizontal, .margin = .{ .x = 20 } });
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 10 } });
 
-    // Render the active panel
-    switch (state.panel_mode) {
+    // Render the active panel (action panel is a true overlay popout)
+    const base_mode: state.PanelMode = if (state.panel_mode == .action) state.prev_panel_mode else state.panel_mode;
+
+    var over = dvui.overlay(@src(), .{ .expand = .both });
+    defer over.deinit();
+
+    // Base content
+    switch (base_mode) {
         .main => try results.render(),
+        .list => try panels.renderList(results.getSelectedItem()),
         .sub => try panels.renderSub(results.getSelectedItem()),
         .command => try panels.renderCommand(results.getSelectedItem()),
+        .action => try results.render(),
+    }
+
+    // Action panel: bottom-right, above base content.
+    if (state.panel_mode == .action) {
+        var anchor = dvui.box(@src(), .{ .dir = .vertical }, .{
+            .gravity_x = 1.0,
+            .gravity_y = 1.0,
+            .margin = .{ .x = 0, .y = 0, .w = 20, .h = 20 },
+        });
+        defer anchor.deinit();
+
+        try floating_action_panel.render(results.getSelectedItem());
     }
 
     return .ok;

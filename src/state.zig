@@ -7,8 +7,10 @@ pub var search_initialized = false;
 
 pub const PanelMode = enum {
     main,
+    list,
     sub,
     command,
+    action,
 };
 
 pub var panel_mode: PanelMode = .main;
@@ -43,6 +45,11 @@ pub const SearchResult = struct {
     title: []const u8,
     subtitle: []const u8,
     icon: []const u8,
+
+    /// Optional overrides for the header shown when this item is selected.
+    /// If null, defaults to title/subtitle.
+    header_title: ?[]const u8 = null,
+    header_subtitle: ?[]const u8 = null,
 };
 
 pub const mock_results = [_]SearchResult{

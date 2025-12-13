@@ -5,17 +5,26 @@ pub fn handleEvents() !dvui.App.Result {
     const evt = dvui.events();
     for (evt) |*e| {
         if (e.evt == .key and e.evt.key.action == .down) {
+            const code = e.evt.key.code;
+
             // ESC behavior:
             // - command panel: back to previous panel
+            // - action panel: back to previous panel
+            // - list/sub: back to main
             // - sub panel: back to main
             // - main: close window
-            if (e.evt.key.code == .escape) {
+            if (code == .escape) {
                 switch (state.panel_mode) {
                     .command => {
                         state.panel_mode = state.prev_panel_mode;
                         e.handled = true;
                     },
-                    .sub => {
+                    .action => {
+                        state.panel_mode = state.prev_panel_mode;
+                        dvui.focusWidget(null, null, null);
+                        e.handled = true;
+                    },
+                    .sub, .list => {
                         state.panel_mode = .main;
                         state.focus_on_results = true;
                         e.handled = true;
@@ -25,7 +34,7 @@ pub fn handleEvents() !dvui.App.Result {
             }
 
             // Tab to switch focus between search and results (main panel only)
-            if (e.evt.key.code == .tab and state.panel_mode == .main) {
+            if (code == .tab and state.panel_mode == .main) {
                 state.focus_on_results = !state.focus_on_results;
                 if (state.focus_on_results) state.selected_index = 0;
                 dvui.focusWidget(null, null, null);
@@ -33,16 +42,24 @@ pub fn handleEvents() !dvui.App.Result {
             }
 
             // Enter behavior depends on current panel.
-            if (e.evt.key.code == .enter) {
+            if (code == .enter) {
                 switch (state.panel_mode) {
                     .main => {
-                        // Search -> results; Results -> sub panel.
+                        // Search -> results; Results -> list panel.
                         if (!state.focus_on_results) {
                             state.focus_on_results = true;
                             state.selected_index = 0;
                         } else {
-                            state.panel_mode = .sub;
+                            state.panel_mode = .list;
+                            state.command_selected_index = 0;
                         }
+                        e.handled = true;
+                    },
+                    .list => {
+                        // Open floating actions from the list panel.
+                        state.prev_panel_mode = .list;
+                        state.panel_mode = .action;
+                        state.command_selected_index = 0;
                         e.handled = true;
                     },
                     .sub => {
@@ -56,35 +73,44 @@ pub fn handleEvents() !dvui.App.Result {
                         state.command_execute = true;
                         e.handled = true;
                     },
+                    .action => {
+                        state.command_execute = true;
+                        e.handled = true;
+                    },
                 }
             }
 
-            // 'k' opens command panel from main(sub) when applicable.
-            if (e.evt.key.code == .k) {
+            // 'k' opens action panel from main/sub when applicable.
+            if (code == .k) {
                 if (state.panel_mode == .main and state.focus_on_results) {
                     state.prev_panel_mode = .main;
-                    state.panel_mode = .command;
+                    state.panel_mode = .action;
                     state.command_selected_index = 0;
                     e.handled = true;
                 } else if (state.panel_mode == .sub) {
                     state.prev_panel_mode = .sub;
-                    state.panel_mode = .command;
+                    state.panel_mode = .action;
+                    state.command_selected_index = 0;
+                    e.handled = true;
+                } else if (state.panel_mode == .list) {
+                    state.prev_panel_mode = .list;
+                    state.panel_mode = .action;
                     state.command_selected_index = 0;
                     e.handled = true;
                 }
             }
 
             // W/S keys for navigation
-            if (e.evt.key.code == .w or e.evt.key.code == .s) {
-                if (state.panel_mode == .command) {
-                    if (e.evt.key.code == .w) {
+            if (code == .w or code == .s) {
+                if (state.panel_mode == .command or state.panel_mode == .action) {
+                    if (code == .w) {
                         if (state.command_selected_index > 0) state.command_selected_index -= 1;
                     } else {
                         state.command_selected_index += 1;
                     }
                     e.handled = true;
                 } else if (state.panel_mode == .main and state.focus_on_results) {
-                    if (e.evt.key.code == .w) {
+                    if (code == .w) {
                         if (state.selected_index > 0) state.selected_index -= 1;
                     } else {
                         state.selected_index += 1;
