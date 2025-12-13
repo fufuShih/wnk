@@ -1,5 +1,5 @@
 // ============================================
-// Host Tree - Virtual DOM for Wink
+// Host Tree - Virtual DOM for wnk
 // Pure JS objects representing the UI tree
 // ============================================
 
@@ -16,13 +16,13 @@ function generateNodeId(): string {
 // Props that should not be serialized
 const INTERNAL_PROPS = new Set(['children', 'key', 'ref']);
 
-// WinkNode - represents a node in the virtual tree
-export class WinkNode {
+// wnkNode - represents a node in the virtual tree
+export class wnkNode {
   public readonly id: string;
   public type: ComponentType;
   public props: Record<string, unknown>;
-  public children: WinkNode[] = [];
-  public parent: WinkNode | null = null;
+  public children: wnkNode[] = [];
+  public parent: wnkNode | null = null;
   public text: string | null = null;
 
   constructor(type: ComponentType, props: Record<string, unknown> = {}) {
@@ -32,13 +32,13 @@ export class WinkNode {
   }
 
   // Append a child node
-  appendChild(child: WinkNode): void {
+  appendChild(child: wnkNode): void {
     child.parent = this;
     this.children.push(child);
   }
 
   // Insert child before another child
-  insertBefore(child: WinkNode, beforeChild: WinkNode): void {
+  insertBefore(child: wnkNode, beforeChild: wnkNode): void {
     child.parent = this;
     const index = this.children.indexOf(beforeChild);
     if (index >= 0) {
@@ -49,7 +49,7 @@ export class WinkNode {
   }
 
   // Remove a child node
-  removeChild(child: WinkNode): void {
+  removeChild(child: wnkNode): void {
     const index = this.children.indexOf(child);
     if (index >= 0) {
       this.children.splice(index, 1);
@@ -95,12 +95,12 @@ export class WinkNode {
 }
 
 // Root container - special node that holds the tree
-export class WinkRoot {
-  public child: WinkNode | null = null;
+export class wnkRoot {
+  public child: wnkNode | null = null;
   private eventHandlers = new Map<string, Map<string, (...args: unknown[]) => void>>();
 
   // Set the root child
-  setChild(node: WinkNode | null): void {
+  setChild(node: wnkNode | null): void {
     this.child = node;
   }
 
@@ -135,10 +135,10 @@ export class WinkRoot {
 // Map component element types to our ComponentType
 export function mapElementType(type: string): ComponentType {
   const typeMap: Record<string, ComponentType> = {
-    'wink-box': 'Box',
-    'wink-text': 'Text',
-    'wink-button': 'Button',
-    'wink-input': 'Input',
+    'wnk-box': 'Box',
+    'wnk-text': 'Text',
+    'wnk-button': 'Button',
+    'wnk-input': 'Input',
   };
 
   return typeMap[type] ?? 'Box';

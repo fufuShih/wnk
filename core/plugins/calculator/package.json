@@ -1,5 +1,5 @@
 {
-  "name": "@wink/plugin-calculator",
+  "name": "@wnk/plugin-calculator",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/bundle.js",

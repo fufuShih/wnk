@@ -1,5 +1,5 @@
 // ============================================
-// Wink Core - Entry Point
+// wnk Core - Entry Point
 // Simplified: query -> results (calculator provider)
 // ============================================
 

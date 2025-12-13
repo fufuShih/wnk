@@ -25,7 +25,7 @@ pub const dvui_app: dvui.App = .{
         .options = .{
             .size = .{ .w = 700.0, .h = 500.0 },
             .min_size = .{ .w = 600.0, .h = 400.0 },
-            .title = "Wink Launcher",
+            .title = "wnk Launcher",
             .window_init_options = .{},
         },
     },
@@ -101,7 +101,7 @@ pub fn AppFrame() !dvui.App.Result {
     });
     defer main_box.deinit();
 
-    // Keep the base Wink layout always visible
+    // Keep the base wnk layout always visible
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 20 } });
     // The top area is either the search box (main panel) or a panel hint.
     const top_mode: state.PanelMode = if (state.panel_mode == .action) state.prev_panel_mode else state.panel_mode;

@@ -1,5 +1,5 @@
 // ============================================
-// Wink SDK - Main Entry Point
+// wnk SDK - Main Entry Point
 // Export all public APIs for plugin developers
 // ============================================
 

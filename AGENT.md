@@ -1,5 +1,5 @@
 
-# WNK (Wink Launcher)
+# WNK (wnk Launcher)
 
 This repository is a small launcher-style app.
 

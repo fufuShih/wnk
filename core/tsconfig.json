@@ -14,7 +14,7 @@
     "rootDir": ".",
     "baseUrl": ".",
     "paths": {
-      "@wink/sdk": ["./wink-sdk/index.ts"]
+      "@wnk/sdk": ["./wnk-sdk/index.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

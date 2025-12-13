@@ -1,19 +1,19 @@
 // ============================================
-// Wink Reconciler
+// wnk Reconciler
 // Custom React Reconciler using react-reconciler
 // Inspired by Ink's architecture
 // ============================================
 
 import ReactReconciler from 'react-reconciler';
 import { DefaultEventPriority } from 'react-reconciler/constants';
-import { WinkNode, WinkRoot, mapElementType } from './host-tree';
+import { wnkNode, wnkRoot, mapElementType } from './host-tree';
 
 // The container type (root of our tree)
-type Container = WinkRoot;
-type Instance = WinkNode;
-type TextInstance = WinkNode;
+type Container = wnkRoot;
+type Instance = wnkNode;
+type TextInstance = wnkNode;
 type ChildSet = never;
-type PublicInstance = WinkNode;
+type PublicInstance = wnkNode;
 type HostContext = Record<string, never>;
 type UpdatePayload = Record<string, unknown>;
 type TimeoutHandle = ReturnType<typeof setTimeout>;
@@ -21,9 +21,9 @@ type NoTimeout = -1;
 type SuspenseInstance = never;
 
 // Callback to notify when tree updates
-let onTreeUpdate: ((root: WinkRoot) => void) | null = null;
+let onTreeUpdate: ((root: wnkRoot) => void) | null = null;
 
-export function setTreeUpdateCallback(callback: (root: WinkRoot) => void): void {
+export function setTreeUpdateCallback(callback: (root: wnkRoot) => void): void {
   onTreeUpdate = callback;
 }
 
@@ -51,7 +51,7 @@ const hostConfig: ReactReconciler.HostConfig<
     rootContainer: Container
   ): Instance {
     const componentType = mapElementType(type);
-    const node = new WinkNode(componentType, props);
+    const node = new wnkNode(componentType, props);
 
     // Capture inline text children (React may not create a TextInstance when
     // shouldSetTextContent() is true).
@@ -75,7 +75,7 @@ const hostConfig: ReactReconciler.HostConfig<
     text: string,
     _rootContainer: Container
   ): TextInstance {
-    const node = new WinkNode('Text', {});
+    const node = new wnkNode('Text', {});
     node.text = text;
     return node;
   },
@@ -274,11 +274,11 @@ const hostConfig: ReactReconciler.HostConfig<
 };
 
 // Create the reconciler
-export const WinkReconciler = ReactReconciler(hostConfig);
+export const wnkReconciler = ReactReconciler(hostConfig);
 
 // Enable concurrent features
-WinkReconciler.injectIntoDevTools({
+wnkReconciler.injectIntoDevTools({
   bundleType: 1, // 0 for production, 1 for development
   version: '0.1.0',
-  rendererPackageName: 'wink-reconciler',
+  rendererPackageName: 'wnk-reconciler',
 });

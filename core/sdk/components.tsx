@@ -1,5 +1,5 @@
 // ============================================
-// Wink SDK Components
+// wnk SDK Components
 // React components that map to dvui primitives
 // ============================================
 
@@ -11,38 +11,38 @@ import type {
   InputProps,
 } from './types';
 
-// Internal symbol to mark Wink components
-export const WINK_COMPONENT = Symbol('wink-component');
+// Internal symbol to mark wnk components
+export const wnk_COMPONENT = Symbol('wnk-component');
 
 // Box - Flexbox container
 export function Box(props: BoxProps): React.ReactElement {
-  return React.createElement('wink-box', {
+  return React.createElement('wnk-box', {
     ...props,
-    [WINK_COMPONENT]: true,
+    [wnk_COMPONENT]: true,
   });
 }
 
 // Text - Text display
 export function Text(props: TextProps): React.ReactElement {
-  return React.createElement('wink-text', {
+  return React.createElement('wnk-text', {
     ...props,
-    [WINK_COMPONENT]: true,
+    [wnk_COMPONENT]: true,
   });
 }
 
 // Button - Interactive button
 export function Button(props: ButtonProps): React.ReactElement {
-  return React.createElement('wink-button', {
+  return React.createElement('wnk-button', {
     ...props,
-    [WINK_COMPONENT]: true,
+    [wnk_COMPONENT]: true,
   });
 }
 
 // Input - Text input field
 export function Input(props: InputProps): React.ReactElement {
-  return React.createElement('wink-input', {
+  return React.createElement('wnk-input', {
     ...props,
-    [WINK_COMPONENT]: true,
+    [wnk_COMPONENT]: true,
   });
 }
 
@@ -50,10 +50,10 @@ export function Input(props: InputProps): React.ReactElement {
 declare global {
   namespace JSX {
     interface IntrinsicElements {
-      'wink-box': BoxProps & { [WINK_COMPONENT]?: boolean };
-      'wink-text': TextProps & { [WINK_COMPONENT]?: boolean };
-      'wink-button': ButtonProps & { [WINK_COMPONENT]?: boolean };
-      'wink-input': InputProps & { [WINK_COMPONENT]?: boolean };
+      'wnk-box': BoxProps & { [wnk_COMPONENT]?: boolean };
+      'wnk-text': TextProps & { [wnk_COMPONENT]?: boolean };
+      'wnk-button': ButtonProps & { [wnk_COMPONENT]?: boolean };
+      'wnk-input': InputProps & { [wnk_COMPONENT]?: boolean };
     }
   }
 }

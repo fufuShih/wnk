@@ -1,5 +1,5 @@
 // ============================================
-// Wink SDK Type Definitions
+// wnk SDK Type Definitions
 // Protocol between Guest (Bun/React) and Host (Zig/dvui)
 // ============================================
 

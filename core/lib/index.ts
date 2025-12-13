@@ -1,17 +1,17 @@
 // ============================================
-// Wink Renderer - Main Export
+// wnk Renderer - Main Export
 // Provides render() function for plugins
 // ============================================
 
 import type { ReactNode } from 'react';
-import { WinkReconciler, setTreeUpdateCallback } from './reconciler';
-import { WinkRoot } from './host-tree';
+import { wnkReconciler, setTreeUpdateCallback } from './reconciler';
+import { wnkRoot } from './host-tree';
 import type { RenderPayload, HostEvent } from '../sdk/types';
 import { _dispatchHostEvent } from '../sdk/hooks';
 
 // Global root instance
-let root: ReturnType<typeof WinkReconciler.createContainer> | null = null;
-let winkRoot: WinkRoot | null = null;
+let root: ReturnType<typeof wnkReconciler.createContainer> | null = null;
+let wnkRoot: wnkRoot | null = null;
 
 // Output mode: 'stdout' for IPC with Zig host, 'callback' for testing
 type OutputMode = 'stdout' | 'callback';
@@ -25,7 +25,7 @@ export function setOutputMode(mode: OutputMode, callback?: (payload: RenderPaylo
 }
 
 // Emit UI tree to host
-function emitToHost(root: WinkRoot): void {
+function emitToHost(root: wnkRoot): void {
   const payload: RenderPayload = {
     version: 1,
     root: root.serialize(),
@@ -42,14 +42,14 @@ function emitToHost(root: WinkRoot): void {
 // Render a React element
 export function render(element: ReactNode): void {
   if (!root) {
-    winkRoot = new WinkRoot();
+    wnkRoot = new wnkRoot();
 
     // Set up tree update callback
     setTreeUpdateCallback(emitToHost);
 
     // Create React container
-    root = WinkReconciler.createContainer(
-      winkRoot,
+    root = wnkReconciler.createContainer(
+      wnkRoot,
       0, // ConcurrentRoot = 1, LegacyRoot = 0
       null, // hydrationCallbacks
       false, // isStrictMode
@@ -61,19 +61,19 @@ export function render(element: ReactNode): void {
   }
 
   // Update the container with new element
-  WinkReconciler.updateContainer(element, root, null, () => {});
+  wnkReconciler.updateContainer(element, root, null, () => {});
 }
 
 // Handle events from host (Zig)
 export function handleHostEvent(event: HostEvent): void {
-  if (!winkRoot) return;
+  if (!wnkRoot) return;
 
   switch (event.type) {
     case 'press':
-      winkRoot.dispatchEvent(event.targetId, 'onPress');
+      wnkRoot.dispatchEvent(event.targetId, 'onPress');
       break;
     case 'change':
-      winkRoot.dispatchEvent(event.targetId, 'onChange', event.payload);
+      wnkRoot.dispatchEvent(event.targetId, 'onChange', event.payload);
       break;
     case 'keydown':
       _dispatchHostEvent('keydown', event.payload);
@@ -83,10 +83,10 @@ export function handleHostEvent(event: HostEvent): void {
 
 // Clean up
 export function unmount(): void {
-  if (root && winkRoot) {
-    WinkReconciler.updateContainer(null, root, null, () => {});
+  if (root && wnkRoot) {
+    wnkReconciler.updateContainer(null, root, null, () => {});
     root = null;
-    winkRoot = null;
+    wnkRoot = null;
   }
 }
 

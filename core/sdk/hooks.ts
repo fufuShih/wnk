@@ -1,5 +1,5 @@
 // ============================================
-// Wink SDK Hooks
+// wnk SDK Hooks
 // React hooks for plugin development
 // ============================================
 
