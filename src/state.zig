@@ -99,6 +99,12 @@ pub fn updatePluginResults(allocator: std.mem.Allocator, json_str: []const u8) !
     }
     plugin_results = parsed;
     plugin_results_allocator = allocator;
+
+    // Auto-focus on results when plugin returns items
+    if (parsed.value.items.len > 0) {
+        focus_on_results = true;
+        selected_index = 0;
+    }
 }
 
 pub fn handleBunMessage(allocator: std.mem.Allocator, json_str: []const u8) void {
