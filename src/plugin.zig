@@ -1,6 +1,5 @@
 // ============================================
-// IPC - Communication with Bun Runtime
-// Spawns Bun process and handles stdin/stdout
+// Plugin Module - Main entry point
 // ============================================
 
 const std = @import("std");
@@ -16,11 +15,6 @@ extern "kernel32" fn PeekNamedPipe(
     lpTotalBytesAvail: ?*u32,
     lpBytesLeftThisMessage: ?*u32,
 ) callconv(.winapi) windows.BOOL;
-
-pub const IpcError = error{
-    ReadFailed,
-    WriteFailed,
-};
 
 pub const BunProcess = struct {
     process: std.process.Child,
@@ -159,4 +153,9 @@ pub const BunProcess = struct {
         self.read_buffer.deinit(self.allocator);
         self.pending_buffer.deinit(self.allocator);
     }
+};
+
+pub const IpcError = error{
+    ReadFailed,
+    WriteFailed,
 };
