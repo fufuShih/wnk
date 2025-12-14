@@ -1,16 +1,23 @@
-
 # Bun Runtime (core)
 
-This folder contains the Bun/TypeScript runtime that acts like a plugin host.
+**Last Updated:** `2025-12-15T02:58:53+08:00`
 
-- It reads JSON lines from stdin.
-- When it receives `{ "type": "query", "text": "..." }`, it computes results and prints
-	`{ "type": "results", "items": [...] }` as a single line on stdout.
+This folder contains the Bun/TypeScript runtime that:
+- reads newline-delimited JSON from stdin (from the Zig host)
+- writes newline-delimited JSON to stdout (back to the host)
+- aggregates plugin results/subpanels
 
-**Calculator plugin**
+## Quick Commands
+- Start runtime (expects host input): `cd core; bun run start`
+- Rebuild plugin bundles: `cd core; bun run build:plugins`
 
-The calculator is implemented as a results provider:
+## Runtime Entry
+- `core/runtime.tsx` routes messages:
+  - `query` -> merges plugin `getResults(...)` output and emits `results`
+  - `getSubpanel` -> emits `subpanel` (used by the host details panel)
+  - `command` -> may emit `effect` (e.g. `setSearchText`)
 
-- Input: the query string from the host.
-- Output: zero or one result item (expression evaluation).
-
+## Plugins
+- Source: `core/plugins/*/src/`
+- Built bundles (imported by `runtime.tsx`): `core/plugins/*/dist/bundle.js`
+- Each plugin bundle exports functions used by the runtime (e.g. `getResults`, optional `getSubpanel`).
