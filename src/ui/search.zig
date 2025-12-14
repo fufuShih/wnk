@@ -49,7 +49,7 @@ pub fn renderSearch() !void {
     defer search_box.deinit();
 
     // Search icon
-    dvui.label(@src(), "[>", .{}, .{ .font_style = .title });
+    dvui.label(@src(), ">_ ", .{}, .{ .font_style = .title });
 
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .w = 10 } });
 
