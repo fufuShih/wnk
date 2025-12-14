@@ -34,8 +34,8 @@ fn renderStoredSelectedHeader() void {
     renderHeaderCard(state.getSelectedItemTitle(), state.getSelectedItemSubtitle());
 }
 
-fn renderSubpanelItemCard(item: state.SubpanelItem, id_extra: usize) void {
-    var item_box = ui.beginItemRow(.{ .id_extra = id_extra, .is_selected = false });
+fn renderSubpanelItemCard(item: state.SubpanelItem, id_extra: usize, is_selected: bool) void {
+    var item_box = ui.beginItemRow(.{ .id_extra = id_extra, .is_selected = is_selected });
     defer item_box.deinit();
 
     var text_box = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .id_extra = id_extra });
@@ -55,7 +55,7 @@ fn renderSubpanelItemsList(items: []const state.SubpanelItem) !void {
 
     for (items, 0..) |item, i| {
         const id_extra: usize = 20_000 + i;
-        renderSubpanelItemCard(item, id_extra);
+        renderSubpanelItemCard(item, id_extra, false);
     }
 }
 
@@ -72,7 +72,40 @@ fn renderSubpanelItemsGrid(items: []const state.SubpanelItem, columns: usize, ga
 
     ui.grid(Ctx, ctx, items.len, columns, gap_f, struct {
         fn cell(c: Ctx, idx: usize, id_extra: usize) void {
-            renderSubpanelItemCard(c.items[idx], id_extra);
+            renderSubpanelItemCard(c.items[idx], id_extra, false);
+        }
+    }.cell);
+}
+
+fn renderMockItemsList(items: []const state.MockPanelItem, selected_index: usize) !void {
+    var scroll = dvui.scrollArea(@src(), .{}, .{
+        .expand = .both,
+        .margin = .{ .x = 20, .y = 0, .w = 20, .h = 20 },
+    });
+    defer scroll.deinit();
+
+    for (items, 0..) |it, i| {
+        const id_extra: usize = 90_000 + i;
+        const is_selected = i == selected_index;
+        renderSubpanelItemCard(.{ .title = it.title, .subtitle = it.subtitle }, id_extra, is_selected);
+    }
+}
+
+fn renderMockItemsGrid(items: []const state.MockPanelItem, selected_index: usize, columns: usize, gap: usize) !void {
+    var scroll = dvui.scrollArea(@src(), .{}, .{
+        .expand = .both,
+        .margin = .{ .x = 20, .y = 0, .w = 20, .h = 20 },
+    });
+    defer scroll.deinit();
+
+    const Ctx = struct { items: []const state.MockPanelItem, selected: usize };
+    const ctx: Ctx = .{ .items = items, .selected = selected_index };
+    const gap_f: f32 = @floatFromInt(gap);
+
+    ui.grid(Ctx, ctx, items.len, columns, gap_f, struct {
+        fn cell(c: Ctx, idx: usize, id_extra: usize) void {
+            const is_selected = idx == c.selected;
+            renderSubpanelItemCard(.{ .title = c.items[idx].title, .subtitle = c.items[idx].subtitle }, id_extra, is_selected);
         }
     }.cell);
 }
@@ -128,26 +161,45 @@ pub fn renderCommand(sel: ?search.SelectedItem) !void {
 }
 
 pub fn renderDetails() !void {
-    // Render header
+    if (state.currentDetails()) |d| {
+        if (d.source == .mock) {
+            if (d.mock_panel) |p| {
+                renderHeaderCard(p.header, p.header_subtitle orelse "");
+
+                const selected = d.selected_index;
+                const layout = p.layout;
+                if (layout) |l| {
+                    if (std.mem.eql(u8, l.mode, "grid")) {
+                        try renderMockItemsGrid(p.items, selected, l.columns orelse 2, l.gap orelse 12);
+                        return;
+                    }
+                }
+
+                try renderMockItemsList(p.items, selected);
+                return;
+            }
+
+            // No panel data: show stored header only.
+            renderStoredSelectedHeader();
+            return;
+        }
+    }
+
+    // Plugin details fallback.
     if (state.subpanel_data) |s| {
         renderHeaderCard(s.value.header, s.value.headerSubtitle orelse "");
     } else {
-        // Pending/fallback share the same stored header.
         renderStoredSelectedHeader();
     }
 
-    // Render items
     if (state.subpanel_data) |s| {
         const layout = s.value.layout;
         if (layout) |l| {
             if (std.mem.eql(u8, l.mode, "grid")) {
-                const cols = l.columns orelse 2;
-                const gap = l.gap orelse 12;
-                try renderSubpanelItemsGrid(s.value.items, cols, gap);
+                try renderSubpanelItemsGrid(s.value.items, l.columns orelse 2, l.gap orelse 12);
                 return;
             }
         }
-
         try renderSubpanelItemsList(s.value.items);
     }
 }
@@ -167,7 +219,7 @@ pub fn renderTop(panel: state.Panel, sel: ?search.SelectedItem) void {
     };
 
     const hint: []const u8 = switch (panel) {
-        .details => "Enter: commands  k: actions  Esc: back",
+        .details => "Enter: open  W/S: move  k: actions  Esc: back",
         .commands => "Enter: run  W/S: move  Esc: back",
         .search => "",
     };

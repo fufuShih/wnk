@@ -1,5 +1,6 @@
 const dvui = @import("dvui");
 const state = @import("state");
+const search = @import("search.zig");
 
 pub const KeyboardResult = enum {
     ok,
@@ -52,13 +53,32 @@ pub fn handleEvents() !KeyboardResult {
                                 state.focus_on_results = true;
                                 state.selected_index = 0;
                             } else {
-                                state.pushPanel(.details);
-                                state.command_selected_index = 0;
+                                const sel = search.getSelectedItem();
+                                if (sel) |s| {
+                                    switch (s) {
+                                        .plugin => |item| {
+                                            state.setSelectedItemInfo(item.title, item.subtitle orelse "");
+                                            state.openPluginDetails();
+                                        },
+                                        .mock => |item| {
+                                            if (item.next_panel) |p| {
+                                                state.setSelectedItemInfo(p.header, p.header_subtitle orelse "");
+                                                state.openMockDetails(p);
+                                            }
+                                        },
+                                    }
+                                    state.command_selected_index = 0;
+                                }
                             }
                             e.handled = true;
                         },
                         .details => {
-                            state.pushPanel(.commands);
+                            if (state.detailsSelectedNextPanel()) |next_panel| {
+                                state.setSelectedItemInfo(next_panel.header, next_panel.header_subtitle orelse "");
+                                state.openMockDetails(next_panel);
+                            } else {
+                                state.openCommands();
+                            }
                             state.command_selected_index = 0;
                             e.handled = true;
                         },
@@ -91,6 +111,9 @@ pub fn handleEvents() !KeyboardResult {
                     } else {
                         state.command_selected_index += 1;
                     }
+                    e.handled = true;
+                } else if (state.currentPanel() == .details) {
+                    if (code == .w) state.detailsMoveSelection(-1) else state.detailsMoveSelection(1);
                     e.handled = true;
                 } else if (state.currentPanel() == .search and state.focus_on_results) {
                     if (code == .w) {

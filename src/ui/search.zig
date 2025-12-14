@@ -51,7 +51,7 @@ pub fn getSelectedItem() ?SelectedItem {
         }
     }
 
-    for (state.mock_results) |result| {
+    for (state.example_results) |result| {
         if (!matchesSearch(result.title, result.subtitle)) continue;
         if (display_index == state.selected_index) {
             return .{ .mock = result };
@@ -112,7 +112,7 @@ pub fn renderResults() !void {
         }
     }
 
-    for (state.mock_results) |result| {
+    for (state.example_results) |result| {
         if (matchesSearch(result.title, result.subtitle)) visible_count += 1;
     }
 
@@ -152,7 +152,7 @@ pub fn renderResults() !void {
     }
 
     // Static mock results
-    for (state.mock_results, 0..) |result, i| {
+    for (state.example_results, 0..) |result, i| {
         if (!matchesSearch(result.title, result.subtitle)) continue;
 
         const is_selected = state.focus_on_results and display_index == state.selected_index;

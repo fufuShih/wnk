@@ -217,37 +217,33 @@ fn sendQueryIfChangedFrame() void {
 }
 
 fn enterListModeFrame() void {
-    // Clear old subpanel data and request new
+    // Clear old subpanel data
     if (state.subpanel_data) |*s| {
         s.deinit();
         state.subpanel_data = null;
     }
 
-    const sel = search.getSelectedItem();
-    if (sel) |s| {
-        // Store selected item info safely (copy to owned buffers)
-        const title: []const u8 = switch (s) {
-            .plugin => |item| item.title,
-            .mock => |item| item.title,
-        };
-        const subtitle: []const u8 = switch (s) {
-            .plugin => |item| item.subtitle orelse "",
-            .mock => |item| item.subtitle,
-        };
-        state.setSelectedItemInfo(title, subtitle);
+    // Entering details doesn't always mean we need a Bun subpanel.
+    state.subpanel_pending = false;
+    const details = state.currentDetails() orelse return;
+    if (details.source != .plugin) return;
 
-        if (bun_process) |*proc| {
-            const item_id: []const u8 = switch (s) {
-                .plugin => |item| item.id orelse item.title,
-                .mock => |item| item.title,
-            };
-            state.subpanel_pending = true;
-            proc.sendGetSubpanel(item_id) catch |err| {
-                std.debug.print("Failed to request subpanel: {}\n", .{err});
-                state.subpanel_pending = false;
-            };
-        }
-    }
+    const sel = search.getSelectedItem();
+    if (sel) |s| switch (s) {
+        .plugin => |item| {
+            state.setSelectedItemInfo(item.title, item.subtitle orelse "");
+            if (bun_process) |*proc| {
+                const item_id: []const u8 = item.id orelse item.title;
+                state.subpanel_pending = true;
+                proc.sendGetSubpanel(item_id) catch |err| {
+                    std.debug.print("Failed to request subpanel: {}\n", .{err});
+                    state.subpanel_pending = false;
+                };
+            }
+        },
+        // Defensive: plugin details but search selection isn't a plugin item.
+        .mock => {},
+    };
 }
 
 fn leaveListModeFrame() void {

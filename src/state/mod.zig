@@ -8,35 +8,56 @@ pub var search_len: usize = 0;
 pub var search_initialized = false;
 
 pub const Panel = enum {
-    /// Root panel: search input + results list.
     search,
-    /// Detail panel for selected result: header + items (from Bun "subpanel").
     details,
-    /// Commands list for selected result.
     commands,
 };
 
-pub var panel_stack: [8]Panel = undefined;
+pub const DetailsSource = enum {
+    plugin,
+    mock,
+};
+
+pub const DetailsPanel = struct {
+    source: DetailsSource = .plugin,
+    mock_panel: ?*const mock.PanelData = null,
+    selected_index: usize = 0,
+};
+
+pub const PanelEntry = union(Panel) {
+    search: void,
+    details: DetailsPanel,
+    commands: void,
+};
+
+pub var panel_stack: [8]PanelEntry = undefined;
 pub var panel_stack_len: usize = 0;
 
 /// Floating action panel overlay (does not affect the panel stack).
 pub var action_open: bool = false;
 
 pub fn resetPanels() void {
-    panel_stack[0] = .search;
+    panel_stack[0] = .{ .search = {} };
     panel_stack_len = 1;
     action_open = false;
 }
 
 pub fn currentPanel() Panel {
-    return panel_stack[panel_stack_len - 1];
+    return std.meta.activeTag(panel_stack[panel_stack_len - 1]);
+}
+
+pub fn currentDetails() ?*DetailsPanel {
+    if (panel_stack[panel_stack_len - 1] == .details) {
+        return &panel_stack[panel_stack_len - 1].details;
+    }
+    return null;
 }
 
 pub fn canPopPanel() bool {
     return panel_stack_len > 1;
 }
 
-pub fn pushPanel(p: Panel) void {
+pub fn pushPanel(p: PanelEntry) void {
     if (panel_stack_len >= panel_stack.len) return;
     panel_stack[panel_stack_len] = p;
     panel_stack_len += 1;
@@ -44,6 +65,61 @@ pub fn pushPanel(p: Panel) void {
 
 pub fn popPanel() void {
     if (panel_stack_len > 1) panel_stack_len -= 1;
+}
+
+pub fn openPluginDetails() void {
+    pushPanel(.{ .details = .{ .source = .plugin, .mock_panel = null, .selected_index = 0 } });
+}
+
+pub fn openMockDetails(panel: *const mock.PanelData) void {
+    pushPanel(.{ .details = .{ .source = .mock, .mock_panel = panel, .selected_index = 0 } });
+}
+
+pub fn openCommands() void {
+    pushPanel(.{ .commands = {} });
+}
+
+pub fn detailsItemsCount() usize {
+    const d = currentDetails() orelse return 0;
+    if (d.source == .mock) {
+        const p = d.mock_panel orelse return 0;
+        return p.items.len;
+    }
+
+    // plugin details: only selectable when data exists
+    if (subpanel_data) |s| return s.value.items.len;
+    return 0;
+}
+
+pub fn detailsClampSelection() void {
+    const d = currentDetails() orelse return;
+    const count = detailsItemsCount();
+    if (count == 0) {
+        d.selected_index = 0;
+        return;
+    }
+    if (d.selected_index >= count) d.selected_index = count - 1;
+}
+
+pub fn detailsMoveSelection(delta: isize) void {
+    const d = currentDetails() orelse return;
+    const count = detailsItemsCount();
+    if (count == 0) return;
+
+    const cur: isize = @intCast(d.selected_index);
+    var next: isize = cur + delta;
+    if (next < 0) next = 0;
+    if (next >= @as(isize, @intCast(count))) next = @as(isize, @intCast(count - 1));
+    d.selected_index = @intCast(next);
+}
+
+pub fn detailsSelectedNextPanel() ?*const mock.PanelData {
+    const d = currentDetails() orelse return null;
+    if (d.source != .mock) return null;
+    const p = d.mock_panel orelse return null;
+    if (p.items.len == 0) return null;
+    if (d.selected_index >= p.items.len) return null;
+    return p.items[d.selected_index].next_panel;
 }
 
 // Command panel selection/trigger
@@ -120,6 +196,10 @@ pub fn getSelectedItemSubtitle() []const u8 {
 }
 
 pub const SearchResult = mock.SearchResult;
+pub const MockPanelData = mock.PanelData;
+pub const MockPanelItem = mock.PanelItem;
+pub const MockPanelLayout = mock.PanelLayout;
+pub const example_results = mock.example_results;
 pub const mock_results = mock.mock_results;
 
 pub fn init(allocator: std.mem.Allocator) void {
