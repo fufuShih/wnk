@@ -3,7 +3,7 @@ const dvui = @import("dvui");
 const SDLBackend = @import("sdl-backend");
 
 // Import modules
-const state = @import("state.zig");
+const state = @import("state");
 const keyboard = @import("ui/keyboard.zig");
 const search = @import("ui/search.zig");
 const panels = @import("ui/panels.zig");

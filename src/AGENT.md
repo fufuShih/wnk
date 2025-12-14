@@ -9,7 +9,7 @@ Zig host UI for the WNK launcher.
 src/
 ├── main.zig      - App initialization, render loop, plugin lifecycle
 ├── plugin.zig    - Bun IPC (stdin/stdout JSON protocol)
-├── state.zig     - Global state
+├── state/        - Global state
 └── ui/
     ├── search.zig                 - Search input + results list
     ├── keyboard.zig               - Event handling & navigation
@@ -36,7 +36,7 @@ Bun → Host:
 
 Methods: `spawn()`, `pollLine()` (non-blocking via `PeekNamedPipe`), `sendQuery()`, `sendCommand()`, `sendEvent()`
 
-### State ([state.zig](state.zig))
+### State ([state/mod.zig](state/mod.zig))
 
 Panel modes: `main`, `list`, `sub`, `command`, `action`
 

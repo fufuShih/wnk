@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const mock = @import("mock.zig");
+
 // Search buffer for the input field
 pub var search_buffer: [256]u8 = undefined;
 pub var search_len: usize = 0;
@@ -40,24 +42,8 @@ pub const PluginResultsPayload = struct {
 pub var plugin_results: ?std.json.Parsed(PluginResultsPayload) = null;
 var plugin_results_allocator: ?std.mem.Allocator = null;
 
-// Mock search results
-pub const SearchResult = struct {
-    title: []const u8,
-    subtitle: []const u8,
-    icon: []const u8,
-
-    /// Optional overrides for the header shown when this item is selected.
-    /// If null, defaults to title/subtitle.
-    header_title: ?[]const u8 = null,
-    header_subtitle: ?[]const u8 = null,
-};
-
-pub const mock_results = [_]SearchResult{
-    .{ .title = "Calendar", .subtitle = "System Preferences", .icon = "C" },
-    .{ .title = "Camera", .subtitle = "Devices", .icon = "O" },
-    .{ .title = "Chrome", .subtitle = "Web Browser", .icon = "@" },
-    .{ .title = "Code", .subtitle = "Development", .icon = "#" },
-};
+pub const SearchResult = mock.SearchResult;
+pub const mock_results = mock.mock_results;
 
 pub fn init(allocator: std.mem.Allocator) void {
     @memset(&search_buffer, 0);

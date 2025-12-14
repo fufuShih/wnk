@@ -1,5 +1,5 @@
 const dvui = @import("dvui");
-const state = @import("../state.zig");
+const state = @import("state");
 const search = @import("search.zig");
 const ui = @import("components.zig");
 const cmds = @import("commands.zig");

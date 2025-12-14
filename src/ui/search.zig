@@ -1,6 +1,6 @@
 const std = @import("std");
 const dvui = @import("dvui");
-const state = @import("../state.zig");
+const state = @import("state");
 
 pub const SelectedItem = union(enum) {
     plugin: state.PluginResultItem,

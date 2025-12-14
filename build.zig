@@ -15,6 +15,15 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    // Add the state module
+    const state_module = b.createModule(.{
+        .root_source_file = b.path("src/state/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe.root_module.addImport("state", state_module);
+
     exe.root_module.addImport("dvui", dvui_dep.module("dvui_sdl3"));
     exe.root_module.addImport("sdl-backend", dvui_dep.module("sdl3"));
     // For windows

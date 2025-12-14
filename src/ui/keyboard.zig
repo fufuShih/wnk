@@ -1,5 +1,5 @@
 const dvui = @import("dvui");
-const state = @import("../state.zig");
+const state = @import("state");
 
 pub const KeyboardResult = enum {
     ok,
