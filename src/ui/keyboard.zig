@@ -1,7 +1,13 @@
 const dvui = @import("dvui");
 const state = @import("../state.zig");
 
-pub fn handleEvents() !dvui.App.Result {
+pub const KeyboardResult = enum {
+    ok,
+    close,
+    hide,
+};
+
+pub fn handleEvents() !KeyboardResult {
     const evt = dvui.events();
     for (evt) |*e| {
         if (e.evt == .key and e.evt.key.action == .down) {
@@ -12,7 +18,7 @@ pub fn handleEvents() !dvui.App.Result {
             // - action panel: back to previous panel
             // - list/sub: back to main
             // - sub panel: back to main
-            // - main: close window
+            // - main: hide to tray
             if (code == .escape) {
                 switch (state.panel_mode) {
                     .command => {
@@ -29,7 +35,7 @@ pub fn handleEvents() !dvui.App.Result {
                         state.focus_on_results = true;
                         e.handled = true;
                     },
-                    .main => return .close,
+                    .main => return .hide,
                 }
             }
 

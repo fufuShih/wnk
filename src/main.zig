@@ -10,13 +10,30 @@ const panels = @import("ui/panels.zig");
 const commands = @import("ui/commands.zig");
 const floating_action_panel = @import("ui/floating_action_panel.zig");
 const plugin = @import("plugin.zig");
+const tray = @import("tray.zig");
 
 var last_query_hash: u64 = 0;
 
-// Global plugin process
+// Global plugin process and tray icon
 var bun_process: ?plugin.BunProcess = null;
+var tray_icon: ?tray.TrayIcon = null;
+var sdl_window_ptr: ?*SDLBackend.c.SDL_Window = null;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
+
+// Window visibility functions
+fn hideWindow() void {
+    if (sdl_window_ptr) |win| {
+        _ = SDLBackend.c.SDL_HideWindow(win);
+    }
+}
+
+fn showWindow() void {
+    if (sdl_window_ptr) |win| {
+        _ = SDLBackend.c.SDL_ShowWindow(win);
+        _ = SDLBackend.c.SDL_RaiseWindow(win);
+    }
+}
 
 // Declare as dvui App
 pub const dvui_app: dvui.App = .{
@@ -44,6 +61,7 @@ pub const std_options: std.Options = .{
 pub fn AppInit(win: *dvui.Window) !void {
     // Get the SDL window directly from backend.impl
     const sdl_window = win.backend.impl.window;
+    sdl_window_ptr = sdl_window;
 
     // Set borderless window (no title bar or window frame)
     _ = SDLBackend.c.SDL_SetWindowBordered(sdl_window, false);
@@ -72,10 +90,24 @@ pub fn AppInit(win: *dvui.Window) !void {
     };
 
     std.debug.print("Bun plugin process started\n", .{});
+
+    // Initialize system tray icon
+    tray_icon = tray.TrayIcon.init(sdl_window) catch |err| {
+        std.debug.print("Failed to create tray icon: {}\n", .{err});
+        return;
+    };
+
+    std.debug.print("System tray icon created\n", .{});
 }
 
 // Executed before application closes, before dvui.Window.deinit()
 pub fn AppDeinit() void {
+    // Clean up tray icon
+    if (tray_icon) |*icon| {
+        icon.deinit();
+        tray_icon = null;
+    }
+
     // Clean up plugin process
     if (bun_process) |*proc| {
         proc.deinit();
@@ -86,10 +118,26 @@ pub fn AppDeinit() void {
 
 // Executed every frame to draw UI
 pub fn AppFrame() !dvui.App.Result {
+    // Check tray icon messages
+    if (tray_icon) |*icon| {
+        icon.checkTrayMessages();
+
+        if (icon.pollEvents()) {
+            showWindow();
+        }
+        if (icon.shouldExit()) {
+            return .close;
+        }
+    }
+
     // Handle keyboard events
     const kb_result = try keyboard.handleEvents();
     if (kb_result == .close) {
         return .close;
+    } else if (kb_result == .hide) {
+        // Hide window to tray
+        hideWindow();
+        return .ok;
     }
 
     // Main container with padding
