@@ -120,38 +120,48 @@ pub const BunProcess = struct {
         _ = self.stdin_file.write("\n") catch return IpcError.WriteFailed;
     }
 
-    pub fn sendQuery(self: *BunProcess, query: []const u8) !void {
-        const Msg = struct {
-            type: []const u8 = "query",
-            text: []const u8,
-        };
+    pub const QueryMsg = struct {
+        type: []const u8 = "query",
+        text: []const u8,
+    };
 
-        const json_line = try std.json.Stringify.valueAlloc(self.allocator, Msg{ .text = query }, .{});
+    pub const CommandMsg = struct {
+        type: []const u8 = "command",
+        name: []const u8,
+        text: []const u8,
+    };
+
+    pub const GetSubpanelMsg = struct {
+        type: []const u8 = "getSubpanel",
+        itemId: []const u8,
+    };
+
+    pub const HostMessage = union(enum) {
+        query: QueryMsg,
+        command: CommandMsg,
+        getSubpanel: GetSubpanelMsg,
+    };
+
+    pub fn sendMessage(self: *BunProcess, msg: HostMessage) !void {
+        const json_line = switch (msg) {
+            .query => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
+            .command => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
+            .getSubpanel => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
+        };
         defer self.allocator.free(json_line);
         try self.sendEvent(json_line);
+    }
+
+    pub fn sendQuery(self: *BunProcess, query: []const u8) !void {
+        try self.sendMessage(.{ .query = .{ .text = query } });
     }
 
     pub fn sendCommand(self: *BunProcess, name: []const u8, text: []const u8) !void {
-        const Msg = struct {
-            type: []const u8 = "command",
-            name: []const u8,
-            text: []const u8,
-        };
-
-        const json_line = try std.json.Stringify.valueAlloc(self.allocator, Msg{ .name = name, .text = text }, .{});
-        defer self.allocator.free(json_line);
-        try self.sendEvent(json_line);
+        try self.sendMessage(.{ .command = .{ .name = name, .text = text } });
     }
 
     pub fn sendGetSubpanel(self: *BunProcess, item_id: []const u8) !void {
-        const Msg = struct {
-            type: []const u8 = "getSubpanel",
-            itemId: []const u8,
-        };
-
-        const json_line = try std.json.Stringify.valueAlloc(self.allocator, Msg{ .itemId = item_id }, .{});
-        defer self.allocator.free(json_line);
-        try self.sendEvent(json_line);
+        try self.sendMessage(.{ .getSubpanel = .{ .itemId = item_id } });
     }
 
     pub fn deinit(self: *BunProcess) void {

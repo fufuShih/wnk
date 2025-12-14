@@ -186,13 +186,13 @@ pub fn renderDetails() !void {
     }
 
     // Plugin details fallback.
-    if (state.subpanel_data) |s| {
+    if (state.ipc.subpanel_data) |s| {
         renderHeaderCard(s.value.header, s.value.headerSubtitle orelse "");
     } else {
         renderStoredSelectedHeader();
     }
 
-    if (state.subpanel_data) |s| {
+    if (state.ipc.subpanel_data) |s| {
         const layout = s.value.layout;
         if (layout) |l| {
             if (std.mem.eql(u8, l.mode, "grid")) {

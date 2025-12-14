@@ -38,7 +38,7 @@ fn matchesSearch(result_title: []const u8, result_subtitle: []const u8) bool {
 pub fn getSelectedItem() ?SelectedItem {
     var display_index: usize = 0;
 
-    if (state.plugin_results) |p| {
+    if (state.ipc.plugin_results) |p| {
         for (p.value.items) |item| {
             const title = item.title;
             const subtitle = item.subtitle orelse "";
@@ -104,7 +104,7 @@ pub fn renderResults() !void {
     // Count visible results and limit selection index
     var visible_count: usize = 0;
 
-    if (state.plugin_results) |p| {
+    if (state.ipc.plugin_results) |p| {
         for (p.value.items) |item| {
             const title = item.title;
             const subtitle = item.subtitle orelse "";
@@ -124,7 +124,7 @@ pub fn renderResults() !void {
     var display_index: usize = 0;
 
     // Plugin results first
-    if (state.plugin_results) |p| {
+    if (state.ipc.plugin_results) |p| {
         for (p.value.items, 0..) |item, i| {
             const title = item.title;
             const subtitle = item.subtitle orelse "";

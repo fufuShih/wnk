@@ -13,7 +13,7 @@ const plugin = @import("plugin.zig");
 const tray = @import("tray");
 
 var last_query_hash: u64 = 0;
-var last_panel: state.Panel = .search;
+var last_panel: state.Panel = state.default_panel;
 
 // Global plugin process and tray icon
 var bun_process: ?plugin.BunProcess = null;
@@ -195,8 +195,8 @@ fn handleCommandExecutionFrame() void {
     }
 
     // Close UI after execution.
-    if (state.action_open) {
-        state.action_open = false;
+    if (state.nav.action_open) {
+        state.nav.action_open = false;
     } else if (state.currentPanel() == .commands) {
         state.popPanel();
     }
@@ -218,13 +218,13 @@ fn sendQueryIfChangedFrame() void {
 
 fn enterListModeFrame() void {
     // Clear old subpanel data
-    if (state.subpanel_data) |*s| {
+    if (state.ipc.subpanel_data) |*s| {
         s.deinit();
-        state.subpanel_data = null;
+        state.ipc.subpanel_data = null;
     }
 
     // Entering details doesn't always mean we need a Bun subpanel.
-    state.subpanel_pending = false;
+    state.ipc.subpanel_pending = false;
     const details = state.currentDetails() orelse return;
     if (details.source != .plugin) return;
 
@@ -234,10 +234,10 @@ fn enterListModeFrame() void {
             state.setSelectedItemInfo(item.title, item.subtitle orelse "");
             if (bun_process) |*proc| {
                 const item_id: []const u8 = item.id orelse item.title;
-                state.subpanel_pending = true;
+                state.ipc.subpanel_pending = true;
                 proc.sendGetSubpanel(item_id) catch |err| {
                     std.debug.print("Failed to request subpanel: {}\n", .{err});
-                    state.subpanel_pending = false;
+                    state.ipc.subpanel_pending = false;
                 };
             }
         },
@@ -247,11 +247,11 @@ fn enterListModeFrame() void {
 }
 
 fn leaveListModeFrame() void {
-    if (state.subpanel_data) |*s| {
+    if (state.ipc.subpanel_data) |*s| {
         s.deinit();
-        state.subpanel_data = null;
+        state.ipc.subpanel_data = null;
     }
-    state.subpanel_pending = false;
+    state.ipc.subpanel_pending = false;
 }
 
 fn handleDetailsPanelTransitionsFrame() void {
@@ -291,7 +291,7 @@ fn renderPanelsArea() !void {
 
     try panels.renderPanelBody(state.currentPanel());
 
-    if (state.action_open) {
+    if (state.nav.action_open) {
         var anchor = dvui.box(@src(), .{ .dir = .vertical }, .{
             .gravity_x = 1.0,
             .gravity_y = 1.0,
