@@ -1,5 +1,6 @@
 import { handleHostEvent, type HostEvent } from './lib';
-import { getResults } from './plugins/calculator/dist/bundle.js';
+import { getResults as getCalcResults } from './plugins/calculator/dist/bundle.js';
+import { getResults as getWeatherResults, getSubpanel as getWeatherSubpanel } from './plugins/weather/dist/bundle.js';
 
 declare const process: any;
 
@@ -28,8 +29,18 @@ function setupStdinListener(): void {
 
       if (msg.type === 'query') {
         const text = msg.text ?? '';
-        const calc: ResultItem[] = getResults(text);
-        writeJson({ type: 'results', items: calc });
+        const calc: ResultItem[] = getCalcResults(text);
+        const weather: ResultItem[] = await getWeatherResults(text);
+        writeJson({ type: 'results', items: [...weather, ...calc] });
+      } else if (msg.type === 'getSubpanel') {
+        const itemId = msg.itemId ?? '';
+        // Try weather subpanel
+        const subpanel = await getWeatherSubpanel(itemId);
+        if (subpanel) {
+          writeJson({ type: 'subpanel', ...subpanel });
+        } else {
+          writeJson({ type: 'subpanel', header: itemId, items: [] });
+        }
       } else if (msg.type === 'command') {
         if (msg.name === 'setSearchText') {
           writeJson({ type: 'effect', name: 'setSearchText', text: msg.text ?? '' });
