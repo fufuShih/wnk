@@ -27,6 +27,7 @@ pub const BunProcess = struct {
     // Accumulates stdout bytes across frames so pollLine can be non-blocking.
     pending_buffer: std.ArrayListUnmanaged(u8),
 
+    // Spawn a new BunProcess
     pub fn spawn(allocator: std.mem.Allocator) !BunProcess {
         const argv = [_][]const u8{ "bun", "run", "core/runtime.tsx" };
 
