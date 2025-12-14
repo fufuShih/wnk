@@ -47,8 +47,27 @@ const WM_RBUTTONUP: u32 = 0x0205;
 const WM_CONTEXTMENU: u32 = 0x007B;
 const WM_NULL: u32 = 0x0000;
 const WM_CLOSE: u32 = 0x0010;
+const WM_HOTKEY: u32 = 0x0312;
+
+// Hotkey modifiers
+const MOD_ALT: u32 = 0x0001;
+const MOD_CONTROL: u32 = 0x0002;
+const MOD_SHIFT: u32 = 0x0004;
+const MOD_WIN: u32 = 0x0008;
+const MOD_NOREPEAT: u32 = 0x4000;
+
+// Virtual key codes
+const VK_SPACE: u32 = 0x20;
+
+// Hotkey ID
+const HOTKEY_ID_SHOW: i32 = 1;
+
+const SW_RESTORE: i32 = 9;
 
 // Windows API functions
+extern "user32" fn RegisterHotKey(hWnd: ?*anyopaque, id: i32, fsModifiers: u32, vk: u32) callconv(.{ .x86_64_win = .{} }) i32;
+extern "user32" fn UnregisterHotKey(hWnd: ?*anyopaque, id: i32) callconv(.{ .x86_64_win = .{} }) i32;
+extern "user32" fn ShowWindow(hWnd: ?*anyopaque, nCmdShow: i32) callconv(.{ .x86_64_win = .{} }) i32;
 extern "shell32" fn Shell_NotifyIconW(dwMessage: u32, lpData: *NOTIFYICONDATAW) callconv(.{ .x86_64_win = .{} }) i32;
 extern "user32" fn LoadIconW(hInstance: ?*anyopaque, lpIconName: [*:0]const u16) callconv(.{ .x86_64_win = .{} }) ?*anyopaque;
 extern "user32" fn CreatePopupMenu() callconv(.{ .x86_64_win = .{} }) ?*anyopaque;
@@ -59,6 +78,7 @@ extern "user32" fn GetCursorPos(lpPoint: *POINT) callconv(.{ .x86_64_win = .{} }
 extern "user32" fn SetForegroundWindow(hWnd: ?*anyopaque) callconv(.{ .x86_64_win = .{} }) i32;
 extern "user32" fn PostMessageW(hWnd: ?*anyopaque, Msg: u32, wParam: usize, lParam: isize) callconv(.{ .x86_64_win = .{} }) i32;
 extern "user32" fn PeekMessageW(lpMsg: *MSG, hWnd: ?*anyopaque, wMsgFilterMin: u32, wMsgFilterMax: u32, wRemoveMsg: u32) callconv(.{ .x86_64_win = .{} }) i32;
+extern "user32" fn DispatchMessageW(lpMsg: *const MSG) callconv(.{ .x86_64_win = .{} }) isize;
 extern "user32" fn RegisterClassExW(lpWndClass: *const WNDCLASSEXW) callconv(.{ .x86_64_win = .{} }) u16;
 extern "user32" fn CreateWindowExW(dwExStyle: u32, lpClassName: [*:0]const u16, lpWindowName: ?[*:0]const u16, dwStyle: u32, X: i32, Y: i32, nWidth: i32, nHeight: i32, hWndParent: ?*anyopaque, hMenu: ?*anyopaque, hInstance: ?*anyopaque, lpParam: ?*anyopaque) callconv(.{ .x86_64_win = .{} }) ?*anyopaque;
 extern "user32" fn DestroyWindow(hWnd: ?*anyopaque) callconv(.{ .x86_64_win = .{} }) i32;
@@ -121,6 +141,13 @@ pub const TrayIcon = struct {
     /// Dedicated message-only window for tray callbacks.
     msg_hwnd: ?*anyopaque,
 
+    fn showAppWindow() void {
+        if (g_app_hwnd) |app_hwnd| {
+            _ = ShowWindow(app_hwnd, SW_RESTORE);
+            _ = SetForegroundWindow(app_hwnd);
+        }
+    }
+
     fn showContextMenuFor(hwnd: ?*anyopaque) void {
         const hMenu = CreatePopupMenu() orelse return;
         defer _ = DestroyMenu(hMenu);
@@ -151,9 +178,7 @@ pub const TrayIcon = struct {
 
         if (cmd == ID_TRAY_SHOW) {
             g_should_show = true;
-            if (g_app_hwnd) |app_hwnd| {
-                _ = PostMessageW(app_hwnd, WM_NULL, 0, 0);
-            }
+            showAppWindow();
         } else if (cmd == ID_TRAY_EXIT) {
             g_should_exit = true;
             if (g_app_hwnd) |app_hwnd| {
@@ -172,9 +197,17 @@ pub const TrayIcon = struct {
             }
             if (event == WM_LBUTTONUP) {
                 g_should_show = true;
-                if (g_app_hwnd) |app_hwnd| {
-                    _ = PostMessageW(app_hwnd, WM_NULL, 0, 0);
-                }
+                showAppWindow();
+                return 0;
+            }
+        }
+
+        // Hotkey registered on msg window.
+        if (msg == WM_HOTKEY) {
+            const hotkey_id: i32 = @intCast(wParam);
+            if (hotkey_id == HOTKEY_ID_SHOW) {
+                g_should_show = true;
+                showAppWindow();
                 return 0;
             }
         }
@@ -282,6 +315,20 @@ pub const TrayIcon = struct {
             return error.FailedToCreateTrayIcon;
         }
 
+        // Register global hotkey.
+        // NOTE: Alt+Space is commonly reserved by Windows for the system menu, so this may fail.
+        if (RegisterHotKey(msg_hwnd, HOTKEY_ID_SHOW, MOD_ALT | MOD_NOREPEAT, VK_SPACE) == 0) {
+            const err = GetLastError();
+            std.debug.print("Warning: Failed to register hotkey Alt+Space (error: {}). Falling back to Ctrl+Alt+Space.\n", .{err});
+            if (RegisterHotKey(msg_hwnd, HOTKEY_ID_SHOW, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_SPACE) == 0) {
+                std.debug.print("Warning: Failed to register fallback hotkey Ctrl+Alt+Space (error: {}).\n", .{GetLastError()});
+            } else {
+                std.debug.print("Global hotkey Ctrl+Alt+Space registered successfully\n", .{});
+            }
+        } else {
+            std.debug.print("Global hotkey Alt+Space registered successfully\n", .{});
+        }
+
         // Reset global flags per init.
         g_should_exit = false;
         g_should_show = false;
@@ -293,6 +340,11 @@ pub const TrayIcon = struct {
     }
 
     pub fn deinit(self: *TrayIcon) void {
+        // Unregister global hotkey
+        if (self.msg_hwnd) |hwnd| {
+            _ = UnregisterHotKey(hwnd, HOTKEY_ID_SHOW);
+        }
+
         _ = Shell_NotifyIconW(NIM_DELETE, &self.nid);
         if (self.msg_hwnd) |hwnd| {
             _ = DestroyWindow(hwnd);
@@ -319,9 +371,6 @@ pub const TrayIcon = struct {
     }
 
     pub fn checkTrayMessages(self: *TrayIcon) void {
-        // Intentionally empty.
-        // SDL's Win32 message pump will DispatchMessageW to our message-only window,
-        // and `trayWndProc` handles WM_TRAYICON there.
         _ = self;
     }
 };
