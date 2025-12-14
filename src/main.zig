@@ -10,7 +10,7 @@ const panels = @import("ui/panels.zig");
 const commands = @import("ui/commands.zig");
 const floating_action_panel = @import("ui/floating_action_panel.zig");
 const plugin = @import("plugin.zig");
-const tray = @import("tray/tray.zig");
+const tray = @import("tray");
 
 var last_query_hash: u64 = 0;
 
