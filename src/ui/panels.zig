@@ -52,9 +52,70 @@ pub fn renderCommand(sel: ?search.SelectedItem) !void {
     }
 }
 
-pub fn renderList(sel: ?search.SelectedItem) !void {
-    // Details content belongs to the main panel area.
-    renderSelectedHeader(sel);
+pub fn renderList(_: ?search.SelectedItem) !void {
+    // Render subpanel data if available
+    if (state.subpanel_data) |s| {
+        // Header card
+        var header_box = ui.beginCard(.{ .margin = .{ .x = 20, .y = 0, .w = 20, .h = 10 } });
+        defer header_box.deinit();
+
+        ui.headerTitle(s.value.header);
+        if (s.value.headerSubtitle) |sub| {
+            _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 4 } });
+            ui.headerSubtitle(sub);
+        }
+    } else if (state.subpanel_pending) {
+        // Loading state - use stored selected item info
+        var box = ui.beginCard(.{ .margin = .{ .x = 20, .y = 0, .w = 20, .h = 10 } });
+        defer box.deinit();
+        ui.headerTitle(state.getSelectedItemTitle());
+        const subtitle = state.getSelectedItemSubtitle();
+        if (subtitle.len > 0) {
+            _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 4 } });
+            ui.headerSubtitle(subtitle);
+        }
+    } else {
+        // Fallback - use stored selected item info
+        var box = ui.beginCard(.{ .margin = .{ .x = 20, .y = 0, .w = 20, .h = 10 } });
+        defer box.deinit();
+        ui.headerTitle(state.getSelectedItemTitle());
+        const subtitle = state.getSelectedItemSubtitle();
+        if (subtitle.len > 0) {
+            _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 4 } });
+            ui.headerSubtitle(subtitle);
+        }
+    }
+
+    // Render subpanel items
+    if (state.subpanel_data) |s| {
+        var scroll = dvui.scrollArea(@src(), .{}, .{
+            .expand = .both,
+            .margin = .{ .x = 20, .y = 0, .w = 20, .h = 20 },
+        });
+        defer scroll.deinit();
+
+        for (s.value.items, 0..) |item, i| {
+            const id_extra: usize = 20_000 + i;
+
+            var item_box = dvui.box(@src(), .{ .dir = .horizontal }, .{
+                .expand = .horizontal,
+                .id_extra = id_extra,
+                .background = true,
+                .corner_radius = .{ .x = 8, .y = 8, .w = 8, .h = 8 },
+                .padding = .{ .x = 12, .y = 8, .w = 12, .h = 8 },
+                .margin = .{ .x = 0, .y = 4, .w = 0, .h = 4 },
+                .color_fill = .{ .r = 0x2a, .g = 0x2a, .b = 0x3e },
+            });
+            defer item_box.deinit();
+
+            var text_box = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .id_extra = id_extra });
+            defer text_box.deinit();
+
+            dvui.label(@src(), "{s}", .{item.title}, .{ .font_style = .title_4, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff }, .id_extra = id_extra });
+            _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 2 }, .id_extra = id_extra + 1000 });
+            dvui.label(@src(), "{s}", .{item.subtitle}, .{ .font_style = .caption, .color_text = .{ .r = 0x88, .g = 0x88, .b = 0x99 }, .id_extra = id_extra + 2000 });
+        }
+    }
 }
 
 pub fn renderTop(mode: state.PanelMode, sel: ?search.SelectedItem) void {
@@ -63,7 +124,7 @@ pub fn renderTop(mode: state.PanelMode, sel: ?search.SelectedItem) void {
     const list_title: []const u8 = if (sel) |s| switch (s) {
         .plugin => |item| item.title,
         .mock => |item| item.title,
-    } else "Details";
+    } else if (state.getSelectedItemTitle().len > 0) state.getSelectedItemTitle() else "Details";
 
     const title: []const u8 = switch (mode) {
         .list => list_title,

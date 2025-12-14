@@ -143,6 +143,17 @@ pub const BunProcess = struct {
         try self.sendEvent(json_line);
     }
 
+    pub fn sendGetSubpanel(self: *BunProcess, item_id: []const u8) !void {
+        const Msg = struct {
+            type: []const u8 = "getSubpanel",
+            itemId: []const u8,
+        };
+
+        const json_line = try std.json.Stringify.valueAlloc(self.allocator, Msg{ .itemId = item_id }, .{});
+        defer self.allocator.free(json_line);
+        try self.sendEvent(json_line);
+    }
+
     pub fn deinit(self: *BunProcess) void {
         self.stdin_file.close();
         self.stdout_file.close();

@@ -7,11 +7,31 @@ pub const SelectedItem = union(enum) {
     mock: state.SearchResult,
 };
 
+fn toLowerByte(c: u8) u8 {
+    return if (c >= 'A' and c <= 'Z') c + 32 else c;
+}
+
+fn containsIgnoreCase(haystack: []const u8, needle: []const u8) bool {
+    if (needle.len == 0) return true;
+    if (needle.len > haystack.len) return false;
+
+    var i: usize = 0;
+    outer: while (i <= haystack.len - needle.len) : (i += 1) {
+        for (needle, 0..) |nc, j| {
+            if (toLowerByte(haystack[i + j]) != toLowerByte(nc)) {
+                continue :outer;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
 fn matchesSearch(result_title: []const u8, result_subtitle: []const u8) bool {
     if (state.search_len == 0) return true;
     const search_text = state.search_buffer[0..state.search_len];
-    return std.mem.indexOf(u8, result_title, search_text) != null or
-        std.mem.indexOf(u8, result_subtitle, search_text) != null;
+    return containsIgnoreCase(result_title, search_text) or
+        containsIgnoreCase(result_subtitle, search_text);
 }
 
 pub fn getSelectedItem() ?SelectedItem {

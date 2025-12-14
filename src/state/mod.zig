@@ -42,6 +42,46 @@ pub const PluginResultsPayload = struct {
 pub var plugin_results: ?std.json.Parsed(PluginResultsPayload) = null;
 var plugin_results_allocator: ?std.mem.Allocator = null;
 
+// Subpanel data (for list/detail view)
+pub const SubpanelItem = struct {
+    title: []const u8,
+    subtitle: []const u8,
+};
+
+pub const SubpanelPayload = struct {
+    type: []const u8,
+    header: []const u8,
+    headerSubtitle: ?[]const u8 = null,
+    items: []SubpanelItem = &.{},
+};
+
+pub var subpanel_data: ?std.json.Parsed(SubpanelPayload) = null;
+pub var subpanel_pending: bool = false;
+
+// Store selected item info when entering list mode (to avoid dangling pointers)
+pub var selected_item_title: [256]u8 = undefined;
+pub var selected_item_title_len: usize = 0;
+pub var selected_item_subtitle: [256]u8 = undefined;
+pub var selected_item_subtitle_len: usize = 0;
+
+pub fn setSelectedItemInfo(title: []const u8, subtitle: []const u8) void {
+    const t_len = @min(title.len, selected_item_title.len);
+    @memcpy(selected_item_title[0..t_len], title[0..t_len]);
+    selected_item_title_len = t_len;
+
+    const s_len = @min(subtitle.len, selected_item_subtitle.len);
+    @memcpy(selected_item_subtitle[0..s_len], subtitle[0..s_len]);
+    selected_item_subtitle_len = s_len;
+}
+
+pub fn getSelectedItemTitle() []const u8 {
+    return selected_item_title[0..selected_item_title_len];
+}
+
+pub fn getSelectedItemSubtitle() []const u8 {
+    return selected_item_subtitle[0..selected_item_subtitle_len];
+}
+
 pub const SearchResult = mock.SearchResult;
 pub const mock_results = mock.mock_results;
 
@@ -68,6 +108,10 @@ pub fn deinit() void {
         p.deinit();
         plugin_results = null;
     }
+    if (subpanel_data) |*s| {
+        s.deinit();
+        subpanel_data = null;
+    }
 }
 
 pub fn updatePluginResults(allocator: std.mem.Allocator, json_str: []const u8) !void {
@@ -93,6 +137,22 @@ pub fn updatePluginResults(allocator: std.mem.Allocator, json_str: []const u8) !
     }
 }
 
+pub fn updateSubpanelData(allocator: std.mem.Allocator, json_str: []const u8) !void {
+    var parsed = std.json.parseFromSlice(SubpanelPayload, allocator, json_str, .{ .ignore_unknown_fields = true }) catch return;
+    errdefer parsed.deinit();
+
+    if (!std.mem.eql(u8, parsed.value.type, "subpanel")) {
+        parsed.deinit();
+        return;
+    }
+
+    if (subpanel_data) |*old| {
+        old.deinit();
+    }
+    subpanel_data = parsed;
+    subpanel_pending = false;
+}
+
 pub fn handleBunMessage(allocator: std.mem.Allocator, json_str: []const u8) void {
     // First parse as generic JSON to inspect message type.
     var parsed_any = std.json.parseFromSlice(std.json.Value, allocator, json_str, .{ .ignore_unknown_fields = true }) catch return;
@@ -105,6 +165,11 @@ pub fn handleBunMessage(allocator: std.mem.Allocator, json_str: []const u8) void
 
     if (std.mem.eql(u8, type_val.string, "results")) {
         updatePluginResults(allocator, json_str) catch {};
+        return;
+    }
+
+    if (std.mem.eql(u8, type_val.string, "subpanel")) {
+        updateSubpanelData(allocator, json_str) catch {};
         return;
     }
 

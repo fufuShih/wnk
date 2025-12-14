@@ -13,6 +13,7 @@ const plugin = @import("plugin.zig");
 const tray = @import("tray");
 
 var last_query_hash: u64 = 0;
+var last_panel_mode: state.PanelMode = .main;
 
 // Global plugin process and tray icon
 var bun_process: ?plugin.BunProcess = null;
@@ -155,18 +156,25 @@ pub fn AppFrame() !dvui.App.Result {
     if (top_mode == .main) {
         try search.renderSearch();
     } else {
-        panels.renderTop(top_mode, search.getSelectedItem());
+        // In list mode we intentionally avoid reading from plugin_results again; the
+        // selected item's title/subtitle are stored in state when entering the list.
+        const top_sel: ?search.SelectedItem = if (top_mode == .list) null else search.getSelectedItem();
+        panels.renderTop(top_mode, top_sel);
     }
 
     // Execute command selected in command panel (triggered by Enter in keyboard handler).
     if (state.command_execute) {
         state.command_execute = false;
 
-        const sel = search.getSelectedItem();
+        // When the action panel is opened from the list panel, don't touch plugin_results.
+        const sel: ?search.SelectedItem = if (state.panel_mode == .action and state.prev_panel_mode == .list)
+            null
+        else
+            search.getSelectedItem();
         const cmd = commands.getCommand(state.command_selected_index);
 
-        if (cmd != null and sel != null) {
-            const text_for_command: []const u8 = switch (sel.?) {
+        if (cmd != null) {
+            const text_for_command: []const u8 = if (sel) |s| switch (s) {
                 .plugin => |item| blk: {
                     if (item.id) |id| {
                         const prefix = "file:";
@@ -177,7 +185,7 @@ pub fn AppFrame() !dvui.App.Result {
                     break :blk item.title;
                 },
                 .mock => |item| item.title,
-            };
+            } else state.getSelectedItemTitle();
 
             // Route action via Bun (command -> effect -> host state update).
             if (bun_process) |*proc| {
@@ -211,6 +219,53 @@ pub fn AppFrame() !dvui.App.Result {
         }
     }
 
+    // Request subpanel data when entering list mode
+    if (state.panel_mode == .list and last_panel_mode != .list) {
+        // Clear old subpanel data and request new
+        if (state.subpanel_data) |*s| {
+            s.deinit();
+            state.subpanel_data = null;
+        }
+
+        // Get selected item ID and request subpanel
+        const sel = search.getSelectedItem();
+        if (sel) |s| {
+            // Store selected item info safely (copy to owned buffers)
+            const title: []const u8 = switch (s) {
+                .plugin => |item| item.title,
+                .mock => |item| item.title,
+            };
+            const subtitle: []const u8 = switch (s) {
+                .plugin => |item| item.subtitle orelse "",
+                .mock => |item| item.subtitle,
+            };
+            state.setSelectedItemInfo(title, subtitle);
+
+            if (bun_process) |*proc| {
+                const item_id: []const u8 = switch (s) {
+                    .plugin => |item| item.id orelse item.title,
+                    .mock => |item| item.title,
+                };
+                state.subpanel_pending = true;
+                proc.sendGetSubpanel(item_id) catch |err| {
+                    std.debug.print("Failed to request subpanel: {}\n", .{err});
+                    state.subpanel_pending = false;
+                };
+            }
+        }
+    }
+
+    // Clear subpanel data when leaving list mode
+    if (state.panel_mode != .list and last_panel_mode == .list) {
+        if (state.subpanel_data) |*s| {
+            s.deinit();
+            state.subpanel_data = null;
+        }
+        state.subpanel_pending = false;
+    }
+
+    last_panel_mode = state.panel_mode;
+
     // Poll Bun process for plugin results (JSON lines)
     if (bun_process) |*proc| {
         while (true) {
@@ -239,7 +294,7 @@ pub fn AppFrame() !dvui.App.Result {
     // Base content
     switch (base_mode) {
         .main => try search.renderResults(),
-        .list => try panels.renderList(search.getSelectedItem()),
+        .list => try panels.renderList(null), // Uses stored item info
         .sub => try panels.renderSub(search.getSelectedItem()),
         .command => try panels.renderCommand(search.getSelectedItem()),
         .action => try search.renderResults(),
