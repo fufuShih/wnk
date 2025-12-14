@@ -8,7 +8,6 @@ const keyboard = @import("ui/keyboard.zig");
 const search = @import("ui/search.zig");
 const panels = @import("ui/panels.zig");
 const commands = @import("ui/commands.zig");
-const floating_action_panel = @import("ui/floating_action_panel.zig");
 const plugin = @import("plugin.zig");
 const tray = @import("tray");
 
@@ -291,16 +290,8 @@ fn renderPanelsArea() !void {
 
     try panels.renderPanelBody(state.currentPanel());
 
-    if (state.nav.action_open) {
-        var anchor = dvui.box(@src(), .{ .dir = .vertical }, .{
-            .gravity_x = 1.0,
-            .gravity_y = 1.0,
-            .margin = .{ .x = 0, .y = 0, .w = 20, .h = 20 },
-        });
-        defer anchor.deinit();
-
-        try floating_action_panel.render(search.getSelectedItem());
-    }
+    panels.renderPanelBottom(state.currentPanel());
+    try panels.renderFloatingAction(search.getSelectedItem());
 }
 
 // Executed every frame to draw UI

@@ -62,7 +62,8 @@ pub fn handleEvents() !KeyboardResult {
                                         },
                                         .mock => |item| {
                                             if (item.next_panel) |p| {
-                                                state.setSelectedItemInfo(p.header, p.header_subtitle orelse "");
+                                                const h = state.panelHeader(p);
+                                                state.setSelectedItemInfo(h.title, h.subtitle orelse "");
                                                 state.openMockDetails(p);
                                             }
                                         },
@@ -74,7 +75,8 @@ pub fn handleEvents() !KeyboardResult {
                         },
                         .details => {
                             if (state.detailsSelectedNextPanel()) |next_panel| {
-                                state.setSelectedItemInfo(next_panel.header, next_panel.header_subtitle orelse "");
+                                const h = state.panelHeader(next_panel);
+                                state.setSelectedItemInfo(h.title, h.subtitle orelse "");
                                 state.openMockDetails(next_panel);
                             } else {
                                 state.openCommands();

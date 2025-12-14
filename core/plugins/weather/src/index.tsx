@@ -110,11 +110,18 @@ export type SubpanelItem = {
   subtitle: string;
 };
 
-export type SubpanelData = {
-  header: string;
-  headerSubtitle?: string;
+export type PanelTop = { type: 'header'; title: string; subtitle?: string } | { type: 'selected' };
+export type PanelMain = {
+  type: 'list';
   layout?: { mode: 'list' | 'grid'; columns?: number; gap?: number };
   items: SubpanelItem[];
+};
+export type PanelBottom = { type: 'none' } | { type: 'info'; text: string };
+
+export type SubpanelData = {
+  top: PanelTop;
+  main: PanelMain;
+  bottom?: PanelBottom;
 };
 
 export async function getSubpanel(itemId: string): Promise<SubpanelData | null> {
@@ -124,9 +131,9 @@ export async function getSubpanel(itemId: string): Promise<SubpanelData | null> 
 
   if (!cachedWeather || !cachedForecast) {
     return {
-      header: 'Weather',
-      headerSubtitle: 'Unable to load weather data',
-      items: [],
+      top: { type: 'header', title: 'Weather', subtitle: 'Unable to load weather data' },
+      main: { type: 'list', items: [] },
+      bottom: { type: 'info', text: 'Status: offline' },
     };
   }
 
@@ -136,10 +143,13 @@ export async function getSubpanel(itemId: string): Promise<SubpanelData | null> 
   }));
 
   return {
-    header: 'Weather',
-    headerSubtitle: `${cachedWeather.city} - ${cachedWeather.temp}°C ${cachedWeather.description}`,
-    layout: { mode: 'grid', columns: 2, gap: 12 },
-    items,
+    top: {
+      type: 'header',
+      title: 'Weather',
+      subtitle: `${cachedWeather.city} - ${cachedWeather.temp}°C ${cachedWeather.description}`,
+    },
+    main: { type: 'list', layout: { mode: 'grid', columns: 2, gap: 12 }, items },
+    bottom: { type: 'info', text: 'Data: Open-Meteo · Cache: 10m' },
   };
 }
 

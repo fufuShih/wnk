@@ -113,8 +113,19 @@ pub const SearchResult = mock.SearchResult;
 pub const MockPanelData = mock.PanelData;
 pub const MockPanelItem = mock.PanelItem;
 pub const MockPanelLayout = mock.PanelLayout;
+pub const MockPanelMain = mock.PanelMain;
+pub const MockPanelTop = mock.PanelTop;
+pub const MockPanelBottom = mock.PanelBottom;
 pub const example_results = mock.example_results;
 pub const mock_results = mock.mock_results;
+
+pub fn panelHeader(p: *const mock.PanelData) mock.PanelTop.Header {
+    return mock.panelHeader(p);
+}
+
+pub fn panelList(p: *const mock.PanelData) ?mock.PanelMain.List {
+    return mock.panelList(p);
+}
 
 pub fn init(allocator: std.mem.Allocator) void {
     @memset(&search_buffer, 0);

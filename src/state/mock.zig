@@ -1,3 +1,17 @@
+pub const PanelTop = union(enum) {
+    header: Header,
+
+    pub const Header = struct {
+        title: []const u8,
+        subtitle: ?[]const u8 = null,
+    };
+};
+
+pub const PanelBottom = union(enum) {
+    none,
+    info: []const u8,
+};
+
 pub const PanelLayout = struct {
     /// "list" (default) or "grid"
     mode: []const u8 = "list",
@@ -5,11 +19,19 @@ pub const PanelLayout = struct {
     gap: ?usize = null,
 };
 
+pub const PanelMain = union(enum) {
+    list: List,
+
+    pub const List = struct {
+        layout: ?PanelLayout = null,
+        items: []const PanelItem = &.{},
+    };
+};
+
 pub const PanelData = struct {
-    header: []const u8,
-    header_subtitle: ?[]const u8 = null,
-    layout: ?PanelLayout = null,
-    items: []const PanelItem = &.{},
+    top: PanelTop,
+    main: PanelMain,
+    bottom: PanelBottom = .none,
 };
 
 pub const PanelItem = struct {
@@ -17,6 +39,18 @@ pub const PanelItem = struct {
     subtitle: []const u8,
     next_panel: ?*const PanelData = null,
 };
+
+pub fn panelHeader(p: *const PanelData) PanelTop.Header {
+    return switch (p.top) {
+        .header => |h| h,
+    };
+}
+
+pub fn panelList(p: *const PanelData) ?PanelMain.List {
+    return switch (p.main) {
+        .list => |l| l,
+    };
+}
 
 pub const SearchResult = struct {
     title: []const u8,
@@ -37,46 +71,54 @@ pub const SearchResult = struct {
 // Deepest nodes first to allow pointers.
 
 const code_settings_panel = PanelData{
-    .header = "Code / Settings",
-    .header_subtitle = "Common toggles",
-    .layout = .{ .mode = "list" },
-    .items = &.{
-        .{ .title = "Toggle Vim Mode", .subtitle = "Editor" },
-        .{ .title = "Change Theme", .subtitle = "Appearance" },
-        .{ .title = "Open Keybindings", .subtitle = "Keyboard" },
-    },
+    .top = .{ .header = .{ .title = "Code / Settings", .subtitle = "Common toggles" } },
+    .main = .{ .list = .{
+        .layout = .{ .mode = "list" },
+        .items = &.{
+            .{ .title = "Toggle Vim Mode", .subtitle = "Editor" },
+            .{ .title = "Change Theme", .subtitle = "Appearance" },
+            .{ .title = "Open Keybindings", .subtitle = "Keyboard" },
+        },
+    } },
+    .bottom = .{ .info = "W/S: move  Esc: back" },
 };
 
 const code_recent_panel = PanelData{
-    .header = "Code / Recent",
-    .header_subtitle = "Pick a project",
-    .layout = .{ .mode = "grid", .columns = 2, .gap = 12 },
-    .items = &.{
-        .{ .title = "wnk", .subtitle = "C:/workspace/projects/wnk" },
-        .{ .title = "notes", .subtitle = "C:/workspace/notes" },
-        .{ .title = "demo", .subtitle = "C:/workspace/demo" },
-        .{ .title = "playground", .subtitle = "C:/workspace/play" },
-    },
+    .top = .{ .header = .{ .title = "Code / Recent", .subtitle = "Pick a project" } },
+    .main = .{ .list = .{
+        .layout = .{ .mode = "grid", .columns = 2, .gap = 12 },
+        .items = &.{
+            .{ .title = "wnk", .subtitle = "C:/workspace/projects/wnk" },
+            .{ .title = "notes", .subtitle = "C:/workspace/notes" },
+            .{ .title = "demo", .subtitle = "C:/workspace/demo" },
+            .{ .title = "playground", .subtitle = "C:/workspace/play" },
+        },
+    } },
+    .bottom = .{ .info = "Enter: open  Esc: back" },
 };
 
 const code_root_panel = PanelData{
-    .header = "Code",
-    .header_subtitle = "Development",
-    .layout = .{ .mode = "list" },
-    .items = &.{
-        .{ .title = "Recent", .subtitle = "Projects", .next_panel = &code_recent_panel },
-        .{ .title = "Settings", .subtitle = "Preferences", .next_panel = &code_settings_panel },
-    },
+    .top = .{ .header = .{ .title = "Code", .subtitle = "Development" } },
+    .main = .{ .list = .{
+        .layout = .{ .mode = "list" },
+        .items = &.{
+            .{ .title = "Recent", .subtitle = "Projects", .next_panel = &code_recent_panel },
+            .{ .title = "Settings", .subtitle = "Preferences", .next_panel = &code_settings_panel },
+        },
+    } },
+    .bottom = .{ .info = "Enter: open  Esc: back" },
 };
 
 const calendar_root_panel = PanelData{
-    .header = "Calendar",
-    .header_subtitle = "System Preferences",
-    .layout = .{ .mode = "list" },
-    .items = &.{
-        .{ .title = "Today", .subtitle = "Overview" },
-        .{ .title = "Upcoming", .subtitle = "Next 7 days" },
-    },
+    .top = .{ .header = .{ .title = "Calendar", .subtitle = "System Preferences" } },
+    .main = .{ .list = .{
+        .layout = .{ .mode = "list" },
+        .items = &.{
+            .{ .title = "Today", .subtitle = "Overview" },
+            .{ .title = "Upcoming", .subtitle = "Next 7 days" },
+        },
+    } },
+    .bottom = .{ .info = "Esc: back" },
 };
 
 /// Minimal example dataset for local UI testing.

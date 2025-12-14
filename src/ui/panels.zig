@@ -4,6 +4,7 @@ const state = @import("state");
 const search = @import("search.zig");
 const ui = @import("components.zig");
 const cmds = @import("commands.zig");
+const floating_action_panel = @import("floating_action_panel.zig");
 
 fn renderHeaderCard(title: []const u8, subtitle: []const u8) void {
     var box = ui.beginCard(.{ .margin = .{ .x = 20, .y = 0, .w = 20, .h = 10 } });
@@ -32,6 +33,32 @@ fn renderSelectedHeader(sel: ?search.SelectedItem) void {
 
 fn renderStoredSelectedHeader() void {
     renderHeaderCard(state.getSelectedItemTitle(), state.getSelectedItemSubtitle());
+}
+
+fn renderDetailsHeader() void {
+    if (state.currentDetails()) |d| {
+        if (d.source == .mock) {
+            if (d.mock_panel) |p| {
+                const h = state.panelHeader(p);
+                renderHeaderCard(h.title, h.subtitle orelse "");
+                return;
+            }
+            renderStoredSelectedHeader();
+            return;
+        }
+    }
+
+    if (state.ipc.currentSubpanelView()) |v| {
+        renderHeaderCard(v.title, v.subtitle);
+    } else {
+        renderStoredSelectedHeader();
+    }
+}
+
+fn clampCommandSelection() void {
+    if (cmds.commands.len > 0 and state.command_selected_index >= cmds.commands.len) {
+        state.command_selected_index = cmds.commands.len - 1;
+    }
 }
 
 fn renderSubpanelItemCard(item: state.SubpanelItem, id_extra: usize, is_selected: bool) void {
@@ -123,6 +150,18 @@ pub fn renderPanelTop(panel: state.Panel) !void {
     // Non-search panels show the nav/hint bar.
     const top_sel: ?search.SelectedItem = if (panel == .details) null else search.getSelectedItem();
     renderTop(panel, top_sel);
+
+    if (panel == .details) {
+        _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 12 } });
+        renderDetailsHeader();
+        return;
+    }
+
+    if (panel == .commands) {
+        _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 12 } });
+        renderStoredSelectedHeader();
+        return;
+    }
 }
 
 pub fn renderPanelBody(panel: state.Panel) !void {
@@ -134,16 +173,10 @@ pub fn renderPanelBody(panel: state.Panel) !void {
 }
 
 pub fn renderCommand(sel: ?search.SelectedItem) !void {
-    if (sel != null) {
-        renderSelectedHeader(sel);
-    } else {
-        renderStoredSelectedHeader();
-    }
+    _ = sel;
 
     // Clamp selection
-    if (cmds.commands.len > 0 and state.command_selected_index >= cmds.commands.len) {
-        state.command_selected_index = cmds.commands.len - 1;
-    }
+    clampCommandSelection();
 
     var list = dvui.box(@src(), .{ .dir = .vertical }, .{
         .expand = .horizontal,
@@ -164,44 +197,104 @@ pub fn renderDetails() !void {
     if (state.currentDetails()) |d| {
         if (d.source == .mock) {
             if (d.mock_panel) |p| {
-                renderHeaderCard(p.header, p.header_subtitle orelse "");
-
+                const list = state.panelList(p) orelse return;
                 const selected = d.selected_index;
-                const layout = p.layout;
+                const layout = list.layout;
                 if (layout) |l| {
                     if (std.mem.eql(u8, l.mode, "grid")) {
-                        try renderMockItemsGrid(p.items, selected, l.columns orelse 2, l.gap orelse 12);
+                        try renderMockItemsGrid(list.items, selected, l.columns orelse 2, l.gap orelse 12);
                         return;
                     }
                 }
 
-                try renderMockItemsList(p.items, selected);
+                try renderMockItemsList(list.items, selected);
                 return;
             }
 
             // No panel data: show stored header only.
-            renderStoredSelectedHeader();
             return;
         }
     }
 
-    // Plugin details fallback.
-    if (state.ipc.subpanel_data) |s| {
-        renderHeaderCard(s.value.header, s.value.headerSubtitle orelse "");
-    } else {
-        renderStoredSelectedHeader();
-    }
-
-    if (state.ipc.subpanel_data) |s| {
-        const layout = s.value.layout;
+    if (state.ipc.currentSubpanelView()) |v| {
+        const layout = v.layout;
         if (layout) |l| {
             if (std.mem.eql(u8, l.mode, "grid")) {
-                try renderSubpanelItemsGrid(s.value.items, l.columns orelse 2, l.gap orelse 12);
+                try renderSubpanelItemsGrid(v.items, l.columns orelse 2, l.gap orelse 12);
                 return;
             }
         }
-        try renderSubpanelItemsList(s.value.items);
+        try renderSubpanelItemsList(v.items);
     }
+}
+
+fn panelBottomInfo(panel: state.Panel) ?[]const u8 {
+    if (panel == .search) {
+        return "Tab: focus  Enter: open  Esc: hide";
+    }
+
+    if (panel == .commands) {
+        return "Enter: run  W/S: move  Esc: back";
+    }
+
+    if (panel == .details) {
+        if (state.currentDetails()) |d| {
+            if (d.source == .mock) {
+                if (d.mock_panel) |p| {
+                    return switch (p.bottom) {
+                        .none => "Enter: open  W/S: move  k: actions  Esc: back",
+                        .info => |txt| txt,
+                    };
+                }
+                return null;
+            }
+        }
+
+    if (state.ipc.subpanel_pending) return "Loading…";
+        if (state.ipc.currentSubpanelView()) |v| return v.bottom_info orelse "Enter: open  W/S: move  k: actions  Esc: back";
+    }
+
+    return null;
+}
+
+fn renderBottomBar(text: []const u8) void {
+    var bar = dvui.box(@src(), .{ .dir = .horizontal }, .{
+        .expand = .horizontal,
+        .margin = .{ .x = 20, .y = 0, .w = 20, .h = 20 },
+        .background = true,
+        .padding = .{ .x = 12, .y = 10, .w = 12, .h = 10 },
+        .corner_radius = .{ .x = 8, .y = 8, .w = 8, .h = 8 },
+        .color_fill = .{ .r = 0x24, .g = 0x24, .b = 0x34 },
+    });
+    defer bar.deinit();
+
+    dvui.label(@src(), "{s}", .{text}, .{ .font_style = .caption, .color_text = .{ .r = 0xaa, .g = 0xaa, .b = 0xbb } });
+}
+
+pub fn renderPanelBottom(panel: state.Panel) void {
+    const text = panelBottomInfo(panel) orelse return;
+
+    var anchor = dvui.box(@src(), .{ .dir = .vertical }, .{
+        .gravity_x = 0.0,
+        .gravity_y = 1.0,
+        .expand = .horizontal,
+    });
+    defer anchor.deinit();
+
+    renderBottomBar(text);
+}
+
+pub fn renderFloatingAction(sel: ?search.SelectedItem) !void {
+    if (!state.nav.action_open) return;
+
+    var anchor = dvui.box(@src(), .{ .dir = .vertical }, .{
+        .gravity_x = 1.0,
+        .gravity_y = 1.0,
+        .margin = .{ .x = 0, .y = 0, .w = 20, .h = 20 },
+    });
+    defer anchor.deinit();
+
+    try floating_action_panel.render(sel);
 }
 
 pub fn renderTop(panel: state.Panel, sel: ?search.SelectedItem) void {
@@ -218,12 +311,6 @@ pub fn renderTop(panel: state.Panel, sel: ?search.SelectedItem) void {
         .search => "<",
     };
 
-    const hint: []const u8 = switch (panel) {
-        .details => "Enter: open  W/S: move  k: actions  Esc: back",
-        .commands => "Enter: run  W/S: move  Esc: back",
-        .search => "",
-    };
-
     var header = dvui.box(@src(), .{ .dir = .horizontal }, .{
         .expand = .horizontal,
         .margin = .{ .x = 20, .y = 0, .w = 20, .h = 0 },
@@ -235,12 +322,4 @@ pub fn renderTop(panel: state.Panel, sel: ?search.SelectedItem) void {
     defer header.deinit();
 
     dvui.label(@src(), "< {s}", .{title}, .{ .font_style = .title_4, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
-
-    // Flexible space pushes hint to the far right.
-    var flex = dvui.box(@src(), .{ .dir = .horizontal }, .{ .expand = .horizontal });
-    defer flex.deinit();
-
-    if (hint.len > 0) {
-        dvui.label(@src(), "{s}", .{hint}, .{ .font_style = .caption, .color_text = .{ .r = 0xaa, .g = 0xaa, .b = 0xbb } });
-    }
 }

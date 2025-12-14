@@ -39,7 +39,12 @@ function setupStdinListener(): void {
         if (subpanel) {
           writeJson({ type: 'subpanel', ...subpanel });
         } else {
-          writeJson({ type: 'subpanel', header: itemId, items: [] });
+          writeJson({
+            type: 'subpanel',
+            top: { type: 'header', title: itemId },
+            main: { type: 'list', items: [] },
+            bottom: { type: 'none' },
+          });
         }
       } else if (msg.type === 'command') {
         if (msg.name === 'setSearchText') {
