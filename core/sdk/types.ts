@@ -1,10 +1,18 @@
 type Spacing = number | { x?: number; y?: number; top?: number; right?: number; bottom?: number; left?: number };
 
 export interface Style {
+  display?: 'flex' | 'grid';
   flexDirection?: 'row' | 'column';
   alignItems?: 'start' | 'center' | 'end' | 'stretch';
   justifyContent?: 'start' | 'center' | 'end' | 'space-between' | 'space-around';
   gap?: number;
+
+  // Grid (host may ignore if unsupported)
+  gridColumns?: number;
+  gridRows?: number;
+  gridColumnGap?: number;
+  gridRowGap?: number;
+
   width?: number | 'auto' | 'fill';
   height?: number | 'auto' | 'fill';
   minWidth?: number;

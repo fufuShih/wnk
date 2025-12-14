@@ -14,33 +14,25 @@ pub fn handleEvents() !KeyboardResult {
             const code = e.evt.key.code;
 
             // ESC behavior:
-            // - command panel: back to previous panel
-            // - action panel: back to previous panel
-            // - list/sub: back to main
-            // - sub panel: back to main
-            // - main: hide to tray
+            // - action overlay: close overlay
+            // - nested panels: pop
+            // - root(search): hide to tray
             if (code == .escape) {
-                switch (state.panel_mode) {
-                    .command => {
-                        state.panel_mode = state.prev_panel_mode;
-                        e.handled = true;
-                    },
-                    .action => {
-                        state.panel_mode = state.prev_panel_mode;
-                        dvui.focusWidget(null, null, null);
-                        e.handled = true;
-                    },
-                    .sub, .list => {
-                        state.panel_mode = .main;
-                        state.focus_on_results = true;
-                        e.handled = true;
-                    },
-                    .main => return .hide,
+                if (state.action_open) {
+                    state.action_open = false;
+                    dvui.focusWidget(null, null, null);
+                    e.handled = true;
+                } else if (state.canPopPanel()) {
+                    state.popPanel();
+                    state.focus_on_results = true;
+                    e.handled = true;
+                } else {
+                    return .hide;
                 }
             }
 
-            // Tab to switch focus between search and results (main panel only)
-            if (code == .tab and state.panel_mode == .main) {
+            // Tab to switch focus between search and results (search panel only)
+            if (code == .tab and state.currentPanel() == .search and !state.action_open) {
                 state.focus_on_results = !state.focus_on_results;
                 if (state.focus_on_results) state.selected_index = 0;
                 dvui.focusWidget(null, null, null);
@@ -49,58 +41,43 @@ pub fn handleEvents() !KeyboardResult {
 
             // Enter behavior depends on current panel.
             if (code == .enter) {
-                switch (state.panel_mode) {
-                    .main => {
-                        // Search -> results; Results -> list panel.
-                        if (!state.focus_on_results) {
-                            state.focus_on_results = true;
-                            state.selected_index = 0;
-                        } else {
-                            state.panel_mode = .list;
+                if (state.action_open) {
+                    state.command_execute = true;
+                    e.handled = true;
+                } else {
+                    switch (state.currentPanel()) {
+                        .search => {
+                            // Search input -> results; results -> details.
+                            if (!state.focus_on_results) {
+                                state.focus_on_results = true;
+                                state.selected_index = 0;
+                            } else {
+                                state.pushPanel(.details);
+                                state.command_selected_index = 0;
+                            }
+                            e.handled = true;
+                        },
+                        .details => {
+                            state.pushPanel(.commands);
                             state.command_selected_index = 0;
-                        }
-                        e.handled = true;
-                    },
-                    .list => {
-                        // Open floating actions from the list panel.
-                        state.prev_panel_mode = .list;
-                        state.panel_mode = .action;
-                        state.command_selected_index = 0;
-                        e.handled = true;
-                    },
-                    .sub => {
-                        // In sub panel, Enter opens command panel.
-                        state.prev_panel_mode = .sub;
-                        state.panel_mode = .command;
-                        state.command_selected_index = 0;
-                        e.handled = true;
-                    },
-                    .command => {
-                        state.command_execute = true;
-                        e.handled = true;
-                    },
-                    .action => {
-                        state.command_execute = true;
-                        e.handled = true;
-                    },
+                            e.handled = true;
+                        },
+                        .commands => {
+                            state.command_execute = true;
+                            e.handled = true;
+                        },
+                    }
                 }
             }
 
-            // 'k' opens action panel from main/sub when applicable.
-            if (code == .k) {
-                if (state.panel_mode == .main and state.focus_on_results) {
-                    state.prev_panel_mode = .main;
-                    state.panel_mode = .action;
+            // 'k' opens the floating action overlay.
+            if (code == .k and !state.action_open) {
+                if (state.currentPanel() == .search and state.focus_on_results) {
+                    state.action_open = true;
                     state.command_selected_index = 0;
                     e.handled = true;
-                } else if (state.panel_mode == .sub) {
-                    state.prev_panel_mode = .sub;
-                    state.panel_mode = .action;
-                    state.command_selected_index = 0;
-                    e.handled = true;
-                } else if (state.panel_mode == .list) {
-                    state.prev_panel_mode = .list;
-                    state.panel_mode = .action;
+                } else if (state.currentPanel() == .details or state.currentPanel() == .commands) {
+                    state.action_open = true;
                     state.command_selected_index = 0;
                     e.handled = true;
                 }
@@ -108,14 +85,14 @@ pub fn handleEvents() !KeyboardResult {
 
             // W/S keys for navigation
             if (code == .w or code == .s) {
-                if (state.panel_mode == .command or state.panel_mode == .action) {
+                if (state.action_open or state.currentPanel() == .commands) {
                     if (code == .w) {
                         if (state.command_selected_index > 0) state.command_selected_index -= 1;
                     } else {
                         state.command_selected_index += 1;
                     }
                     e.handled = true;
-                } else if (state.panel_mode == .main and state.focus_on_results) {
+                } else if (state.currentPanel() == .search and state.focus_on_results) {
                     if (code == .w) {
                         if (state.selected_index > 0) state.selected_index -= 1;
                     } else {

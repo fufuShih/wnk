@@ -7,16 +7,44 @@ pub var search_buffer: [256]u8 = undefined;
 pub var search_len: usize = 0;
 pub var search_initialized = false;
 
-pub const PanelMode = enum {
-    main,
-    list,
-    sub,
-    command,
-    action,
+pub const Panel = enum {
+    /// Root panel: search input + results list.
+    search,
+    /// Detail panel for selected result: header + items (from Bun "subpanel").
+    details,
+    /// Commands list for selected result.
+    commands,
 };
 
-pub var panel_mode: PanelMode = .main;
-pub var prev_panel_mode: PanelMode = .main;
+pub var panel_stack: [8]Panel = undefined;
+pub var panel_stack_len: usize = 0;
+
+/// Floating action panel overlay (does not affect the panel stack).
+pub var action_open: bool = false;
+
+pub fn resetPanels() void {
+    panel_stack[0] = .search;
+    panel_stack_len = 1;
+    action_open = false;
+}
+
+pub fn currentPanel() Panel {
+    return panel_stack[panel_stack_len - 1];
+}
+
+pub fn canPopPanel() bool {
+    return panel_stack_len > 1;
+}
+
+pub fn pushPanel(p: Panel) void {
+    if (panel_stack_len >= panel_stack.len) return;
+    panel_stack[panel_stack_len] = p;
+    panel_stack_len += 1;
+}
+
+pub fn popPanel() void {
+    if (panel_stack_len > 1) panel_stack_len -= 1;
+}
 
 // Command panel selection/trigger
 pub var command_selected_index: usize = 0;
@@ -48,10 +76,19 @@ pub const SubpanelItem = struct {
     subtitle: []const u8,
 };
 
+pub const SubpanelLayout = struct {
+    /// "list" (default) or "grid"
+    mode: []const u8 = "list",
+    /// Used when mode == "grid". Defaults handled in UI.
+    columns: ?usize = null,
+    gap: ?usize = null,
+};
+
 pub const SubpanelPayload = struct {
     type: []const u8,
     header: []const u8,
     headerSubtitle: ?[]const u8 = null,
+    layout: ?SubpanelLayout = null,
     items: []SubpanelItem = &.{},
 };
 
@@ -90,10 +127,12 @@ pub fn init(allocator: std.mem.Allocator) void {
     search_initialized = true;
     plugin_results_allocator = allocator;
 
-    panel_mode = .main;
-    prev_panel_mode = .main;
+    resetPanels();
     command_selected_index = 0;
     command_execute = false;
+
+    selected_item_title_len = 0;
+    selected_item_subtitle_len = 0;
 }
 
 pub fn setSearchText(text: []const u8) void {
@@ -186,7 +225,7 @@ pub fn handleBunMessage(allocator: std.mem.Allocator, json_str: []const u8) void
 
     if (std.mem.eql(u8, eff.value.name, "setSearchText")) {
         if (eff.value.text) |t| setSearchText(t);
-        panel_mode = .main;
+        resetPanels();
         focus_on_results = false;
         return;
     }

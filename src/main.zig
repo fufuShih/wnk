@@ -13,7 +13,7 @@ const plugin = @import("plugin.zig");
 const tray = @import("tray");
 
 var last_query_hash: u64 = 0;
-var last_panel_mode: state.PanelMode = .main;
+var last_panel: state.Panel = .search;
 
 // Global plugin process and tray icon
 var bun_process: ?plugin.BunProcess = null;
@@ -117,9 +117,11 @@ pub fn AppDeinit() void {
     state.deinit();
 }
 
-// Executed every frame to draw UI
-pub fn AppFrame() !dvui.App.Result {
-    // Check tray icon messages
+fn currentPanel() state.Panel {
+    return state.currentPanel();
+}
+
+fn handleTrayFrame() ?dvui.App.Result {
     if (tray_icon) |*icon| {
         icon.checkTrayMessages();
 
@@ -130,84 +132,78 @@ pub fn AppFrame() !dvui.App.Result {
             return .close;
         }
     }
+    return null;
+}
 
-    // Handle keyboard events
+fn handleKeyboardFrame() !?dvui.App.Result {
     const kb_result = try keyboard.handleEvents();
     if (kb_result == .close) {
         return .close;
     } else if (kb_result == .hide) {
-        // Hide window to tray
         hideWindow();
         return .ok;
     }
+    return null;
+}
 
-    // Main container with padding
-    var main_box = dvui.box(@src(), .{ .dir = .vertical }, .{
-        .expand = .both,
-        .background = true,
-        .color_fill = .{ .r = 0x1e, .g = 0x1e, .b = 0x2e },
-    });
-    defer main_box.deinit();
-
-    // Keep the base wnk layout always visible
+fn renderTopArea() !void {
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 20 } });
-    // The top area is either the search box (main panel) or a panel hint.
-    const top_mode: state.PanelMode = if (state.panel_mode == .action) state.prev_panel_mode else state.panel_mode;
-    if (top_mode == .main) {
-        try search.renderSearch();
-    } else {
-        // In list mode we intentionally avoid reading from plugin_results again; the
-        // selected item's title/subtitle are stored in state when entering the list.
-        const top_sel: ?search.SelectedItem = if (top_mode == .list) null else search.getSelectedItem();
-        panels.renderTop(top_mode, top_sel);
-    }
 
-    // Execute command selected in command panel (triggered by Enter in keyboard handler).
-    if (state.command_execute) {
-        state.command_execute = false;
+    try panels.renderPanelTop(currentPanel());
+}
 
-        // When the action panel is opened from the list panel, don't touch plugin_results.
-        const sel: ?search.SelectedItem = if (state.panel_mode == .action and state.prev_panel_mode == .list)
-            null
-        else
-            search.getSelectedItem();
-        const cmd = commands.getCommand(state.command_selected_index);
-
-        if (cmd != null) {
-            const text_for_command: []const u8 = if (sel) |s| switch (s) {
-                .plugin => |item| blk: {
-                    if (item.id) |id| {
-                        const prefix = "file:";
-                        if (std.mem.startsWith(u8, id, prefix)) {
-                            break :blk id[prefix.len..];
-                        }
-                    }
-                    break :blk item.title;
-                },
-                .mock => |item| item.title,
-            } else state.getSelectedItemTitle();
-
-            // Route action via Bun (command -> effect -> host state update).
-            if (bun_process) |*proc| {
-                proc.sendCommand(cmd.?.name, text_for_command) catch |err| {
-                    std.debug.print("Failed to send command: {}\n", .{err});
-                };
-            } else {
-                // Fallback if Bun isn't running.
-                if (std.mem.eql(u8, cmd.?.name, "setSearchText")) {
-                    state.setSearchText(text_for_command);
-                    state.focus_on_results = false;
-                    state.panel_mode = .main;
+fn textForCommand(sel: ?search.SelectedItem) []const u8 {
+    if (sel) |s| switch (s) {
+        .plugin => |item| {
+            if (item.id) |id| {
+                const prefix = "file:";
+                if (std.mem.startsWith(u8, id, prefix)) {
+                    return id[prefix.len..];
                 }
             }
-        }
+            return item.title;
+        },
+        .mock => |item| return item.title,
+    };
+    return state.getSelectedItemTitle();
+}
 
-        // Close command panel regardless.
-        state.panel_mode = state.prev_panel_mode;
-        dvui.focusWidget(null, null, null);
+fn handleCommandExecutionFrame() void {
+    if (!state.command_execute) return;
+    state.command_execute = false;
+
+    // When operating from details/commands panels, rely on stored selected item info.
+    const base_sel: ?search.SelectedItem = if (state.currentPanel() == .search) search.getSelectedItem() else null;
+
+    const cmd = commands.getCommand(state.command_selected_index);
+    if (cmd != null) {
+        const text_for_command = textForCommand(base_sel);
+
+        // Route action via Bun (command -> effect -> host state update).
+        if (bun_process) |*proc| {
+            proc.sendCommand(cmd.?.name, text_for_command) catch |err| {
+                std.debug.print("Failed to send command: {}\n", .{err});
+            };
+        } else {
+            // Fallback if Bun isn't running.
+            if (std.mem.eql(u8, cmd.?.name, "setSearchText")) {
+                state.setSearchText(text_for_command);
+                state.focus_on_results = false;
+                state.resetPanels();
+            }
+        }
     }
 
-    // Send query to Bun when search text changes
+    // Close UI after execution.
+    if (state.action_open) {
+        state.action_open = false;
+    } else if (state.currentPanel() == .commands) {
+        state.popPanel();
+    }
+    dvui.focusWidget(null, null, null);
+}
+
+fn sendQueryIfChangedFrame() void {
     if (bun_process) |*proc| {
         const query = state.search_buffer[0..state.search_len];
         const h = std.hash.Wyhash.hash(0, query);
@@ -218,55 +214,62 @@ pub fn AppFrame() !dvui.App.Result {
             };
         }
     }
+}
 
-    // Request subpanel data when entering list mode
-    if (state.panel_mode == .list and last_panel_mode != .list) {
-        // Clear old subpanel data and request new
-        if (state.subpanel_data) |*s| {
-            s.deinit();
-            state.subpanel_data = null;
-        }
+fn enterListModeFrame() void {
+    // Clear old subpanel data and request new
+    if (state.subpanel_data) |*s| {
+        s.deinit();
+        state.subpanel_data = null;
+    }
 
-        // Get selected item ID and request subpanel
-        const sel = search.getSelectedItem();
-        if (sel) |s| {
-            // Store selected item info safely (copy to owned buffers)
-            const title: []const u8 = switch (s) {
-                .plugin => |item| item.title,
+    const sel = search.getSelectedItem();
+    if (sel) |s| {
+        // Store selected item info safely (copy to owned buffers)
+        const title: []const u8 = switch (s) {
+            .plugin => |item| item.title,
+            .mock => |item| item.title,
+        };
+        const subtitle: []const u8 = switch (s) {
+            .plugin => |item| item.subtitle orelse "",
+            .mock => |item| item.subtitle,
+        };
+        state.setSelectedItemInfo(title, subtitle);
+
+        if (bun_process) |*proc| {
+            const item_id: []const u8 = switch (s) {
+                .plugin => |item| item.id orelse item.title,
                 .mock => |item| item.title,
             };
-            const subtitle: []const u8 = switch (s) {
-                .plugin => |item| item.subtitle orelse "",
-                .mock => |item| item.subtitle,
+            state.subpanel_pending = true;
+            proc.sendGetSubpanel(item_id) catch |err| {
+                std.debug.print("Failed to request subpanel: {}\n", .{err});
+                state.subpanel_pending = false;
             };
-            state.setSelectedItemInfo(title, subtitle);
-
-            if (bun_process) |*proc| {
-                const item_id: []const u8 = switch (s) {
-                    .plugin => |item| item.id orelse item.title,
-                    .mock => |item| item.title,
-                };
-                state.subpanel_pending = true;
-                proc.sendGetSubpanel(item_id) catch |err| {
-                    std.debug.print("Failed to request subpanel: {}\n", .{err});
-                    state.subpanel_pending = false;
-                };
-            }
         }
     }
+}
 
-    // Clear subpanel data when leaving list mode
-    if (state.panel_mode != .list and last_panel_mode == .list) {
-        if (state.subpanel_data) |*s| {
-            s.deinit();
-            state.subpanel_data = null;
-        }
-        state.subpanel_pending = false;
+fn leaveListModeFrame() void {
+    if (state.subpanel_data) |*s| {
+        s.deinit();
+        state.subpanel_data = null;
     }
+    state.subpanel_pending = false;
+}
 
-    last_panel_mode = state.panel_mode;
+fn handleDetailsPanelTransitionsFrame() void {
+    const now = state.currentPanel();
+    if (now == .details and last_panel != .details) {
+        enterListModeFrame();
+    }
+    if (now != .details and last_panel == .details) {
+        leaveListModeFrame();
+    }
+    last_panel = now;
+}
 
-    // Poll Bun process for plugin results (JSON lines)
+fn pollBunMessagesFrame() void {
     if (bun_process) |*proc| {
         while (true) {
             const maybe_line = proc.pollLine() catch |err| {
@@ -280,28 +283,19 @@ pub fn AppFrame() !dvui.App.Result {
             break;
         }
     }
+}
 
+fn renderPanelsArea() !void {
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 20 } });
     _ = dvui.separator(@src(), .{ .expand = .horizontal, .margin = .{ .x = 20 } });
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 10 } });
 
-    // Render the active panel (action panel is a true overlay popout)
-    const base_mode: state.PanelMode = if (state.panel_mode == .action) state.prev_panel_mode else state.panel_mode;
-
     var over = dvui.overlay(@src(), .{ .expand = .both });
     defer over.deinit();
 
-    // Base content
-    switch (base_mode) {
-        .main => try search.renderResults(),
-        .list => try panels.renderList(null), // Uses stored item info
-        .sub => try panels.renderSub(search.getSelectedItem()),
-        .command => try panels.renderCommand(search.getSelectedItem()),
-        .action => try search.renderResults(),
-    }
+    try panels.renderPanelBody(state.currentPanel());
 
-    // Action panel: bottom-right, above base content.
-    if (state.panel_mode == .action) {
+    if (state.action_open) {
         var anchor = dvui.box(@src(), .{ .dir = .vertical }, .{
             .gravity_x = 1.0,
             .gravity_y = 1.0,
@@ -311,6 +305,27 @@ pub fn AppFrame() !dvui.App.Result {
 
         try floating_action_panel.render(search.getSelectedItem());
     }
+}
+
+// Executed every frame to draw UI
+pub fn AppFrame() !dvui.App.Result {
+    if (handleTrayFrame()) |res| return res;
+    if (try handleKeyboardFrame()) |res| return res;
+
+    // Main container with padding
+    var main_box = dvui.box(@src(), .{ .dir = .vertical }, .{
+        .expand = .both,
+        .background = true,
+        .color_fill = .{ .r = 0x1e, .g = 0x1e, .b = 0x2e },
+    });
+    defer main_box.deinit();
+
+    handleCommandExecutionFrame();
+    handleDetailsPanelTransitionsFrame();
+    try renderTopArea();
+    sendQueryIfChangedFrame();
+    pollBunMessagesFrame();
+    try renderPanelsArea();
 
     return .ok;
 }

@@ -113,6 +113,7 @@ export type SubpanelItem = {
 export type SubpanelData = {
   header: string;
   headerSubtitle?: string;
+  layout?: { mode: 'list' | 'grid'; columns?: number; gap?: number };
   items: SubpanelItem[];
 };
 
@@ -137,6 +138,7 @@ export async function getSubpanel(itemId: string): Promise<SubpanelData | null> 
   return {
     header: 'Weather',
     headerSubtitle: `${cachedWeather.city} - ${cachedWeather.temp}°C ${cachedWeather.description}`,
+    layout: { mode: 'grid', columns: 2, gap: 12 },
     items,
   };
 }

@@ -1,6 +1,7 @@
 const std = @import("std");
 const dvui = @import("dvui");
 const state = @import("state");
+const ui = @import("components.zig");
 
 pub const SelectedItem = union(enum) {
     plugin: state.PluginResultItem,
@@ -132,17 +133,7 @@ pub fn renderResults() !void {
             const is_selected = state.focus_on_results and display_index == state.selected_index;
             const id_extra: usize = 10_000 + i;
 
-            var item_box = dvui.box(@src(), .{ .dir = .horizontal }, .{
-                .expand = .horizontal,
-                .id_extra = id_extra,
-                .background = true,
-                .border = if (is_selected) .{ .x = 2, .y = 2, .w = 2, .h = 2 } else .{},
-                .corner_radius = .{ .x = 8, .y = 8, .w = 8, .h = 8 },
-                .padding = .{ .x = 12, .y = 8, .w = 12, .h = 8 },
-                .margin = .{ .x = 0, .y = 4, .w = 0, .h = 4 },
-                .color_fill = if (is_selected) .{ .r = 0x3a, .g = 0x3a, .b = 0x5e } else .{ .r = 0x2a, .g = 0x2a, .b = 0x3e },
-                .color_border = if (is_selected) .{ .r = 0x6a, .g = 0x6a, .b = 0xff } else .{ .r = 0x2a, .g = 0x2a, .b = 0x3e },
-            });
+            var item_box = ui.beginItemRow(.{ .id_extra = id_extra, .is_selected = is_selected });
             defer item_box.deinit();
 
             display_index += 1;
@@ -167,17 +158,7 @@ pub fn renderResults() !void {
         const is_selected = state.focus_on_results and display_index == state.selected_index;
         const id_extra: usize = 1_000 + i;
 
-        var item_box = dvui.box(@src(), .{ .dir = .horizontal }, .{
-            .expand = .horizontal,
-            .id_extra = id_extra,
-            .background = true,
-            .border = if (is_selected) .{ .x = 2, .y = 2, .w = 2, .h = 2 } else .{},
-            .corner_radius = .{ .x = 8, .y = 8, .w = 8, .h = 8 },
-            .padding = .{ .x = 12, .y = 8, .w = 12, .h = 8 },
-            .margin = .{ .x = 0, .y = 4, .w = 0, .h = 4 },
-            .color_fill = if (is_selected) .{ .r = 0x3a, .g = 0x3a, .b = 0x5e } else .{ .r = 0x2a, .g = 0x2a, .b = 0x3e },
-            .color_border = if (is_selected) .{ .r = 0x6a, .g = 0x6a, .b = 0xff } else .{ .r = 0x2a, .g = 0x2a, .b = 0x3e },
-        });
+        var item_box = ui.beginItemRow(.{ .id_extra = id_extra, .is_selected = is_selected });
         defer item_box.deinit();
 
         display_index += 1;
