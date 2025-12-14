@@ -17,12 +17,12 @@ pub fn build(b: *std.Build) void {
 
     // Add the state module
     const state_module = b.createModule(.{
-        .root_source_file = b.path("src/state/mod.zig"),
+        .root_source_file = b.path("src/mod/state/mod.zig"),
         .target = target,
         .optimize = optimize,
     });
     const tray_module = b.createModule(.{
-        .root_source_file = b.path("src/tray/mod.zig"),
+        .root_source_file = b.path("src/mod/tray/mod.zig"),
         .target = target,
         .optimize = optimize,
     });
