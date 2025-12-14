@@ -1,6 +1,5 @@
 import { handleHostEvent, type HostEvent } from './lib';
 import { getResults } from './plugins/calculator/src/index';
-import { getResults as getFileResults } from './plugins/files/src/index';
 
 declare const process: any;
 
@@ -30,8 +29,7 @@ function setupStdinListener(): void {
       if (msg.type === 'query') {
         const text = msg.text ?? '';
         const calc: ResultItem[] = getResults(text);
-        const files: ResultItem[] = await getFileResults(text);
-        writeJson({ type: 'results', items: [...files, ...calc] });
+        writeJson({ type: 'results', items: calc });
       } else if (msg.type === 'command') {
         if (msg.name === 'setSearchText') {
           writeJson({ type: 'effect', name: 'setSearchText', text: msg.text ?? '' });
