@@ -1,5 +1,5 @@
 import { handleHostEvent, type HostEvent } from './lib';
-import { getResults } from './plugins/calculator/src/index';
+import { getResults } from './plugins/calculator/dist/bundle.js';
 
 declare const process: any;
 
