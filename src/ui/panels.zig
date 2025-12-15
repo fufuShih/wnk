@@ -229,32 +229,25 @@ pub fn renderDetails() !void {
 }
 
 fn panelBottomInfo(panel: state.Panel) ?[]const u8 {
-    if (panel == .search) {
-        return "Tab: focus  Enter: open  Esc: hide";
+    switch (panel) {
+        .search => return "Tab: focus  Enter: open  Esc: hide",
+        .commands => return "Enter: run  W/S: move  Esc: back",
+        .details => {},
     }
 
-    if (panel == .commands) {
-        return "Enter: run  W/S: move  Esc: back";
-    }
-
-    if (panel == .details) {
-        if (state.currentDetails()) |d| {
-            if (d.source == .mock) {
-                if (d.mock_panel) |p| {
-                    return switch (p.bottom) {
-                        .none => "Enter: open  W/S: move  k: actions  Esc: back",
-                        .info => |txt| txt,
-                    };
-                }
-                return null;
-            }
+    if (state.currentDetails()) |d| {
+        if (d.source == .mock) {
+            const p = d.mock_panel orelse return null;
+            return switch (p.bottom) {
+                .none => "Enter: open  W/S: move  k: actions  Esc: back",
+                .info => |txt| txt,
+            };
         }
+    }
 
     if (state.ipc.subpanel_pending) return "Loading…";
-        if (state.ipc.currentSubpanelView()) |v| return v.bottom_info orelse "Enter: open  W/S: move  k: actions  Esc: back";
-    }
-
-    return null;
+    if (state.ipc.currentSubpanelView()) |v| return v.bottom_info orelse "Enter: open  W/S: move  k: actions  Esc: back";
+    return "Enter: open  W/S: move  k: actions  Esc: back";
 }
 
 fn renderBottomBar(text: []const u8) void {

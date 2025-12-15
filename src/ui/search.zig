@@ -8,6 +8,10 @@ pub const SelectedItem = union(enum) {
     mock: state.SearchResult,
 };
 
+fn querySlice() []const u8 {
+    return state.search_buffer[0..state.search_len];
+}
+
 fn toLowerByte(c: u8) u8 {
     return if (c >= 'A' and c <= 'Z') c + 32 else c;
 }
@@ -28,21 +32,55 @@ fn containsIgnoreCase(haystack: []const u8, needle: []const u8) bool {
     return false;
 }
 
-fn matchesSearch(result_title: []const u8, result_subtitle: []const u8) bool {
-    if (state.search_len == 0) return true;
-    const search_text = state.search_buffer[0..state.search_len];
-    return containsIgnoreCase(result_title, search_text) or
-        containsIgnoreCase(result_subtitle, search_text);
+fn matchesSearch(result_title: []const u8, result_subtitle: []const u8, query: []const u8) bool {
+    if (query.len == 0) return true;
+    return containsIgnoreCase(result_title, query) or
+        containsIgnoreCase(result_subtitle, query);
+}
+
+fn visibleResultsCount(query: []const u8) usize {
+    var visible_count: usize = 0;
+
+    if (state.ipc.plugin_results) |p| {
+        for (p.value.items) |item| {
+            const title = item.title;
+            const subtitle = item.subtitle orelse "";
+            if (matchesSearch(title, subtitle, query)) visible_count += 1;
+        }
+    }
+
+    for (state.example_results) |result| {
+        if (matchesSearch(result.title, result.subtitle, query)) visible_count += 1;
+    }
+
+    return visible_count;
+}
+
+pub fn clampSelectedIndex() void {
+    const query = querySlice();
+    const visible_count = visibleResultsCount(query);
+
+    if (visible_count == 0) {
+        state.selected_index = 0;
+        return;
+    }
+
+    if (state.selected_index >= visible_count) {
+        state.selected_index = visible_count - 1;
+    }
 }
 
 pub fn getSelectedItem() ?SelectedItem {
+    clampSelectedIndex();
+
+    const query = querySlice();
     var display_index: usize = 0;
 
     if (state.ipc.plugin_results) |p| {
         for (p.value.items) |item| {
             const title = item.title;
             const subtitle = item.subtitle orelse "";
-            if (!matchesSearch(title, subtitle)) continue;
+            if (!matchesSearch(title, subtitle, query)) continue;
 
             if (display_index == state.selected_index) {
                 return .{ .plugin = item };
@@ -52,7 +90,7 @@ pub fn getSelectedItem() ?SelectedItem {
     }
 
     for (state.example_results) |result| {
-        if (!matchesSearch(result.title, result.subtitle)) continue;
+        if (!matchesSearch(result.title, result.subtitle, query)) continue;
         if (display_index == state.selected_index) {
             return .{ .mock = result };
         }
@@ -60,6 +98,21 @@ pub fn getSelectedItem() ?SelectedItem {
     }
 
     return null;
+}
+
+fn renderResultRow(icon: []const u8, title: []const u8, subtitle: []const u8, id_extra: usize, is_selected: bool) void {
+    var item_box = ui.beginItemRow(.{ .id_extra = id_extra, .is_selected = is_selected });
+    defer item_box.deinit();
+
+    dvui.label(@src(), "{s}", .{icon}, .{ .font_style = .title, .id_extra = id_extra });
+    _ = dvui.spacer(@src(), .{ .min_size_content = .{ .w = 12 }, .id_extra = id_extra + 1000 });
+
+    var text_box = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .id_extra = id_extra + 2000 });
+    defer text_box.deinit();
+
+    dvui.label(@src(), "{s}", .{title}, .{ .font_style = .title_4, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff }, .id_extra = id_extra + 3000 });
+    _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 2 }, .id_extra = id_extra + 4000 });
+    dvui.label(@src(), "{s}", .{subtitle}, .{ .font_style = .caption, .color_text = .{ .r = 0x88, .g = 0x88, .b = 0x99 }, .id_extra = id_extra + 5000 });
 }
 
 pub fn renderSearch() !void {
@@ -95,30 +148,14 @@ pub fn renderSearch() !void {
 }
 
 pub fn renderResults() !void {
+    clampSelectedIndex();
+    const query = querySlice();
+
     var scroll = dvui.scrollArea(@src(), .{}, .{
         .expand = .both,
         .margin = .{ .x = 20, .y = 0, .w = 20, .h = 20 },
     });
     defer scroll.deinit();
-
-    // Count visible results and limit selection index
-    var visible_count: usize = 0;
-
-    if (state.ipc.plugin_results) |p| {
-        for (p.value.items) |item| {
-            const title = item.title;
-            const subtitle = item.subtitle orelse "";
-            if (matchesSearch(title, subtitle)) visible_count += 1;
-        }
-    }
-
-    for (state.example_results) |result| {
-        if (matchesSearch(result.title, result.subtitle)) visible_count += 1;
-    }
-
-    if (visible_count > 0 and state.selected_index >= visible_count) {
-        state.selected_index = visible_count - 1;
-    }
 
     // Filter and display results
     var display_index: usize = 0;
@@ -128,49 +165,27 @@ pub fn renderResults() !void {
         for (p.value.items, 0..) |item, i| {
             const title = item.title;
             const subtitle = item.subtitle orelse "";
-            if (!matchesSearch(title, subtitle)) continue;
+            if (!matchesSearch(title, subtitle, query)) continue;
 
             const is_selected = state.focus_on_results and display_index == state.selected_index;
             const id_extra: usize = 10_000 + i;
 
-            var item_box = ui.beginItemRow(.{ .id_extra = id_extra, .is_selected = is_selected });
-            defer item_box.deinit();
-
             display_index += 1;
 
             const icon = item.icon orelse "=";
-            dvui.label(@src(), "{s}", .{icon}, .{ .font_style = .title, .id_extra = id_extra });
-            _ = dvui.spacer(@src(), .{ .min_size_content = .{ .w = 12 }, .id_extra = id_extra });
-
-            var text_box = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .id_extra = id_extra });
-            defer text_box.deinit();
-
-            dvui.label(@src(), "{s}", .{title}, .{ .font_style = .title_4, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff }, .id_extra = id_extra });
-            _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 2 }, .id_extra = id_extra + 1000 });
-            dvui.label(@src(), "{s}", .{subtitle}, .{ .font_style = .caption, .color_text = .{ .r = 0x88, .g = 0x88, .b = 0x99 }, .id_extra = id_extra + 2000 });
+            renderResultRow(icon, title, subtitle, id_extra, is_selected);
         }
     }
 
     // Static mock results
     for (state.example_results, 0..) |result, i| {
-        if (!matchesSearch(result.title, result.subtitle)) continue;
+        if (!matchesSearch(result.title, result.subtitle, query)) continue;
 
         const is_selected = state.focus_on_results and display_index == state.selected_index;
         const id_extra: usize = 1_000 + i;
 
-        var item_box = ui.beginItemRow(.{ .id_extra = id_extra, .is_selected = is_selected });
-        defer item_box.deinit();
-
         display_index += 1;
 
-        dvui.label(@src(), "{s}", .{result.icon}, .{ .font_style = .title, .id_extra = id_extra });
-        _ = dvui.spacer(@src(), .{ .min_size_content = .{ .w = 12 }, .id_extra = id_extra });
-
-        var text_box = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .id_extra = id_extra });
-        defer text_box.deinit();
-
-        dvui.label(@src(), "{s}", .{result.title}, .{ .font_style = .title_4, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff }, .id_extra = id_extra });
-        _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 2 }, .id_extra = id_extra + 1000 });
-        dvui.label(@src(), "{s}", .{result.subtitle}, .{ .font_style = .caption, .color_text = .{ .r = 0x88, .g = 0x88, .b = 0x99 }, .id_extra = id_extra + 2000 });
+        renderResultRow(result.icon, result.title, result.subtitle, id_extra, is_selected);
     }
 }
