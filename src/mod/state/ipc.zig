@@ -14,6 +14,7 @@ pub const PluginResultsPayload = struct {
 
 pub var plugin_results: ?std.json.Parsed(PluginResultsPayload) = null;
 pub var plugin_results_allocator: ?std.mem.Allocator = null;
+pub var results_pending: bool = false;
 
 pub fn updatePluginResults(allocator: std.mem.Allocator, json_str: []const u8) !void {
     // Parse only the results messages; ignore other messages.
@@ -30,6 +31,7 @@ pub fn updatePluginResults(allocator: std.mem.Allocator, json_str: []const u8) !
     }
     plugin_results = parsed;
     plugin_results_allocator = allocator;
+    results_pending = false;
 }
 
 pub const SubpanelItem = struct {

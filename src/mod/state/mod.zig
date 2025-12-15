@@ -131,6 +131,8 @@ pub fn init(allocator: std.mem.Allocator) void {
     @memset(&search_buffer, 0);
     search_initialized = true;
     ipc.plugin_results_allocator = allocator;
+    ipc.results_pending = false;
+    ipc.subpanel_pending = false;
 
     resetPanels();
     command_selected_index = 0;

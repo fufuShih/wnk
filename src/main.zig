@@ -12,6 +12,7 @@ const plugin = @import("plugin.zig");
 const tray = @import("tray");
 
 var last_query_hash: u64 = 0;
+var last_query_change_ms: i64 = 0;
 var last_panel: state.Panel = state.default_panel;
 
 // Global plugin process and tray icon
@@ -206,11 +207,20 @@ fn sendQueryIfChangedFrame() void {
     if (bun_process) |*proc| {
         const query = state.search_buffer[0..state.search_len];
         const h = std.hash.Wyhash.hash(0, query);
+        const now_ms: i64 = std.time.milliTimestamp();
         if (h != last_query_hash) {
             last_query_hash = h;
+            last_query_change_ms = now_ms;
+            state.ipc.results_pending = true;
+        }
+
+        // Debounce to avoid spamming Bun (especially for network-backed plugins).
+        const debounce_ms: i64 = 120;
+        if (state.ipc.results_pending and (now_ms - last_query_change_ms) >= debounce_ms) {
             proc.sendQuery(query) catch |err| {
                 std.debug.print("Failed to send query: {}\n", .{err});
             };
+            // Keep results_pending true until we receive a results message.
         }
     }
 }

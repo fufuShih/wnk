@@ -10,42 +10,60 @@ function writeJson(obj: object): void {
   console.log(JSON.stringify(obj));
 }
 
-function setupStdinListener(): void {
-  if (!process?.stdin) return;
+let latestQueryToken = 0;
+let latestSubpanelToken = 0;
 
-  process.stdin.setEncoding('utf8');
-  let buffer = '';
+let stdinBuffer = '';
+const stdinQueue: string[] = [];
+let draining = false;
 
-  process.stdin.on('data', async (chunk: string) => {
-    buffer += chunk;
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+async function drainStdinQueue(): Promise<void> {
+  if (draining) return;
+  draining = true;
 
-    for (const line of lines) {
+  try {
+    while (stdinQueue.length > 0) {
+      const line = stdinQueue.shift()!;
       if (!line.trim()) continue;
 
       let msg: any;
       try { msg = JSON.parse(line); } catch { continue; }
 
       if (msg.type === 'query') {
+        const token = ++latestQueryToken;
         const text = msg.text ?? '';
+
         const calc: ResultItem[] = getCalcResults(text);
-        const weather: ResultItem[] = await getWeatherResults(text);
-        writeJson({ type: 'results', items: [...weather, ...calc] });
+        writeJson({ type: 'results', items: [...calc] });
+
+        void (async () => {
+          try {
+            const weather: ResultItem[] = await getWeatherResults(text);
+            if (token !== latestQueryToken) return;
+            writeJson({ type: 'results', items: [...weather, ...calc] });
+          } catch {}
+        })();
       } else if (msg.type === 'getSubpanel') {
+        const token = ++latestSubpanelToken;
         const itemId = msg.itemId ?? '';
-        // Try weather subpanel
-        const subpanel = await getWeatherSubpanel(itemId);
-        if (subpanel) {
-          writeJson({ type: 'subpanel', ...subpanel });
-        } else {
-          writeJson({
-            type: 'subpanel',
-            top: { type: 'header', title: itemId },
-            main: { type: 'list', items: [] },
-            bottom: { type: 'none' },
-          });
-        }
+
+        void (async () => {
+          try {
+            const subpanel = await getWeatherSubpanel(itemId);
+            if (token !== latestSubpanelToken) return;
+
+            if (subpanel) {
+              writeJson({ type: 'subpanel', ...subpanel });
+            } else {
+              writeJson({
+                type: 'subpanel',
+                top: { type: 'header', title: itemId },
+                main: { type: 'list', items: [] },
+                bottom: { type: 'none' },
+              });
+            }
+          } catch {}
+        })();
       } else if (msg.type === 'command') {
         if (msg.name === 'setSearchText') {
           writeJson({ type: 'effect', name: 'setSearchText', text: msg.text ?? '' });
@@ -54,6 +72,23 @@ function setupStdinListener(): void {
         try { handleHostEvent(msg as HostEvent); } catch {}
       }
     }
+  } finally {
+    draining = false;
+    if (stdinQueue.length > 0) void drainStdinQueue();
+  }
+}
+
+function setupStdinListener(): void {
+  if (!process?.stdin) return;
+
+  process.stdin.setEncoding('utf8');
+
+  process.stdin.on('data', (chunk: string) => {
+    stdinBuffer += chunk;
+    const lines = stdinBuffer.split('\n');
+    stdinBuffer = lines.pop() || '';
+    for (const line of lines) stdinQueue.push(line);
+    void drainStdinQueue();
   });
 
   process.stdin.on('end', () => process.exit(0));

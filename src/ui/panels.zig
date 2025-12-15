@@ -230,7 +230,10 @@ pub fn renderDetails() !void {
 
 fn panelBottomInfo(panel: state.Panel) ?[]const u8 {
     switch (panel) {
-        .search => return "Tab: focus  Enter: open  Esc: hide",
+        .search => {
+            if (state.ipc.results_pending) return "Searching…  Tab: focus  Enter: open  Esc: hide";
+            return "Tab: focus  Enter: open  Esc: hide";
+        },
         .commands => return "Enter: run  W/S: move  Esc: back",
         .details => {},
     }
