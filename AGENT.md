@@ -17,7 +17,7 @@ Messages are newline-delimited JSON over stdin/stdout.
 
 Host -> Bun
 - `{ "type": "query", "text": "..." }`
-- `{ "type": "getSubpanel", "itemId": "..." }`
+- `{ "type": "getSubpanel", "pluginId": "...", "itemId": "..." }`
 - `{ "type": "command", "name": "...", "text": "..." }`
 
 Bun -> Host

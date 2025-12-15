@@ -21,3 +21,4 @@ This folder contains the Bun/TypeScript runtime that:
 - Source: `core/plugins/*/src/`
 - Built bundles (imported by `runtime.tsx`): `core/plugins/*/dist/bundle.js`
 - Each plugin bundle exports functions used by the runtime (e.g. `getResults`, optional `getSubpanel`).
+- Plugins declare metadata in `core/plugins/*/manifest.json` (loaded by the runtime).

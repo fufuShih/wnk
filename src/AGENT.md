@@ -21,7 +21,10 @@ src/
   ui/
     search.zig       - Search input + results list
     keyboard.zig     - Input handling & navigation
-    panels.zig       - Panel rendering (search/details/commands/action)
+    panel/
+      top.zig        - Panel top header rendering
+      main.zig       - Panel main content rendering + overlay
+      bottom.zig     - Panel bottom hint bar
     floating_action_panel.zig
     commands.zig     - Command definitions and UI
     components.zig   - Shared UI helpers
