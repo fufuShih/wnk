@@ -1,6 +1,6 @@
 // ============================================
 // Weather Plugin
-// Provides weather results and 7-day forecast in subpanel
+// Provides weather results + a forecast subpanel
 // Uses Open-Meteo API (free, no API key required)
 // ============================================
 
@@ -9,8 +9,6 @@ export type ResultItem = {
   title: string;
   subtitle?: string;
   icon?: string;
-  action?: 'subpanel';
-  subpanelId?: string;
 };
 
 type WeatherData = {
@@ -80,9 +78,7 @@ async function fetchWeatherData(): Promise<{ weather: WeatherData; forecast: For
 
 async function updateWeatherCache(): Promise<void> {
   const now = Date.now();
-  if (cachedWeather && cachedForecast && now - lastFetch < CACHE_DURATION) {
-    return;
-  }
+  if (cachedWeather && cachedForecast && now - lastFetch < CACHE_DURATION) return;
 
   const result = await fetchWeatherData();
   if (result) {
@@ -104,23 +100,22 @@ export async function getResults(_query: string): Promise<ResultItem[]> {
   ];
 }
 
-// Subpanel data structure for Zig to render
 export type SubpanelItem = {
   title: string;
   subtitle: string;
 };
 
 export type PanelTop = { type: 'header'; title: string; subtitle?: string } | { type: 'selected' };
-export type PanelMain = {
-  type: 'list';
-  layout?: { mode: 'list' | 'grid'; columns?: number; gap?: number };
-  items: SubpanelItem[];
-};
 export type PanelBottom = { type: 'none' } | { type: 'info'; text: string };
+
+export type PanelNode =
+  | { type: 'list'; items: SubpanelItem[] }
+  | { type: 'grid'; columns?: number; gap?: number; items: SubpanelItem[] }
+  | { type: 'box'; dir?: 'vertical' | 'horizontal'; gap?: number; children: PanelNode[] };
 
 export type SubpanelData = {
   top: PanelTop;
-  main: PanelMain;
+  main: PanelNode;
   bottom?: PanelBottom;
 };
 
@@ -137,61 +132,29 @@ export async function getSubpanel(itemId: string): Promise<SubpanelData | null> 
     };
   }
 
+  const summary: PanelNode = {
+    type: 'list',
+    items: [{ title: `${cachedWeather.city}  ${cachedWeather.temp}°C`, subtitle: cachedWeather.description }],
+  };
+
   const items: SubpanelItem[] = cachedForecast.map((day) => ({
     title: `${day.date}  ${day.temp_max}° / ${day.temp_min}°`,
     subtitle: getWeatherDescription(day.weatherCode),
   }));
 
   return {
-    top: {
-      type: 'header',
-      title: 'Weather',
-      subtitle: `${cachedWeather.city} - ${cachedWeather.temp}°C ${cachedWeather.description}`,
+    top: { type: 'header', title: 'Weather', subtitle: '7-day forecast' },
+    main: {
+      type: 'box',
+      dir: 'vertical',
+      gap: 12,
+      children: [summary, { type: 'grid', columns: 2, gap: 12, items }],
     },
-    main: { type: 'list', layout: { mode: 'grid', columns: 2, gap: 12 }, items },
     bottom: { type: 'info', text: 'Data: Open-Meteo · Cache: 10m' },
   };
 }
 
-export function renderSubpanel(subpanelId: string): JSX.Element | null {
-  if (subpanelId !== 'weather-forecast') return null;
-  if (!cachedForecast || cachedForecast.length === 0) {
-    return <div>No forecast data available</div>;
-  }
-
-  return (
-    <div style={{ padding: '16px' }}>
-      <h2 style={{ marginBottom: '16px' }}>7-Day Forecast</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {cachedForecast.map((day, index) => (
-          <div
-            key={index}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '12px',
-              background: '#f5f5f5',
-              borderRadius: '8px',
-            }}
-          >
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 'bold' }}>{day.date}</div>
-              <div style={{ fontSize: '14px', color: '#666' }}>
-                {getWeatherDescription(day.weatherCode)}
-              </div>
-            </div>
-            <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-              {day.temp_max}° / {day.temp_min}°
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Default export for compatibility
 export default function WeatherPlugin(): null {
   return null;
 }
+

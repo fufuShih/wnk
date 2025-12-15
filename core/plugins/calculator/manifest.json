@@ -1,0 +1,7 @@
+{
+  "id": "calculator",
+  "name": "Calculator",
+  "icon": "=",
+  "entry": "./dist/bundle.js"
+}
+
