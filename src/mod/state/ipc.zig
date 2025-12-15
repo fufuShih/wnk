@@ -51,14 +51,6 @@ pub const SubpanelItem = struct {
     subtitle: []const u8,
 };
 
-pub const SubpanelLayout = struct {
-    /// "list" (default) or "grid"
-    mode: []const u8 = "list",
-    /// Used when mode == "grid". Defaults handled in UI.
-    columns: ?usize = null,
-    gap: ?usize = null,
-};
-
 pub const PanelTopPayload = struct {
     /// "header" or "selected"
     type: []const u8 = "header",
@@ -69,9 +61,6 @@ pub const PanelTopPayload = struct {
 pub const PanelNodePayload = struct {
     /// "list", "grid", or "box"
     type: []const u8 = "list",
-
-    /// Legacy: when `type == "list"`, a layout with `mode == "grid"` is treated as a grid.
-    layout: ?SubpanelLayout = null,
 
     /// Used when `type == "grid"`.
     columns: ?usize = null,
@@ -97,13 +86,6 @@ pub const SubpanelPayload = struct {
     top: ?PanelTopPayload = null,
     main: ?PanelNodePayload = null,
     bottom: ?PanelBottomPayload = null,
-
-    /// Legacy fields (still accepted).
-    header: ?[]const u8 = null,
-    headerSubtitle: ?[]const u8 = null,
-    info: ?[]const u8 = null,
-    layout: ?SubpanelLayout = null,
-    items: []SubpanelItem = &.{},
 };
 
 pub var subpanel_data: ?std.json.Parsed(SubpanelPayload) = null;
@@ -122,25 +104,22 @@ pub fn currentSubpanelView() ?SubpanelView {
     const parsed = subpanel_data orelse return null;
     const p = parsed.value;
 
-    const title: []const u8 = if (p.top) |t| blk: {
-        if (std.mem.eql(u8, t.type, "header")) break :blk (t.title orelse p.header orelse "");
-        break :blk (p.header orelse "");
-    } else (p.header orelse "");
-
-    const subtitle: []const u8 = if (p.top) |t| blk: {
-        if (std.mem.eql(u8, t.type, "header")) break :blk (t.subtitle orelse p.headerSubtitle orelse "");
-        break :blk (p.headerSubtitle orelse "");
-    } else (p.headerSubtitle orelse "");
-
-    const bottom_info: ?[]const u8 = if (p.bottom) |b| blk: {
-        if (std.mem.eql(u8, b.type, "info")) break :blk (b.text orelse p.info);
-        break :blk null;
-    } else p.info;
-
-    const main: PanelNodePayload = if (p.main) |m|
-        m
+    const title: []const u8 = if (p.top) |t|
+        if (std.mem.eql(u8, t.type, "header")) (t.title orelse "") else ""
     else
-        .{ .type = "list", .layout = p.layout, .items = p.items };
+        "";
+
+    const subtitle: []const u8 = if (p.top) |t|
+        if (std.mem.eql(u8, t.type, "header")) (t.subtitle orelse "") else ""
+    else
+        "";
+
+    const bottom_info: ?[]const u8 = if (p.bottom) |b|
+        if (std.mem.eql(u8, b.type, "info")) b.text else null
+    else
+        null;
+
+    const main: PanelNodePayload = p.main orelse .{};
 
     return .{
         .title = title,

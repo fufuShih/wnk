@@ -91,36 +91,26 @@ fn renderSubpanelItemsGridContent(items: []const state.SubpanelItem, selected_in
 
 fn renderSubpanelNodeContent(node: state.ipc.PanelNodePayload, selected_index: usize, flat_index: *usize) void {
     if (std.mem.eql(u8, node.type, "box")) {
-        const dir: dvui.Direction = if (node.dir) |d|
-            if (std.mem.eql(u8, d, "horizontal")) .horizontal else .vertical
-        else
-            .vertical;
+        const is_horizontal = if (node.dir) |d| std.mem.eql(u8, d, "horizontal") else false;
 
         const gap: usize = node.gap orelse 12;
         const gap_f: f32 = @floatFromInt(gap);
 
-        var box = dvui.box(@src(), .{ .dir = dir }, .{ .expand = .horizontal, .id_extra = 80_000 + flat_index.* });
+        var box = dvui.box(@src(), .{ .dir = if (is_horizontal) .horizontal else .vertical }, .{ .expand = .horizontal, .id_extra = 80_000 + flat_index.* });
         defer box.deinit();
 
         for (node.children, 0..) |child, i| {
             renderSubpanelNodeContent(child, selected_index, flat_index);
             if (i + 1 < node.children.len and gap > 0) {
-                _ = dvui.spacer(@src(), .{ .min_size_content = if (dir == .horizontal) .{ .w = gap_f } else .{ .h = gap_f } });
+                _ = dvui.spacer(@src(), .{ .min_size_content = if (is_horizontal) .{ .w = gap_f } else .{ .h = gap_f } });
             }
         }
         return;
     }
 
-    const is_grid: bool = blk: {
-        if (std.mem.eql(u8, node.type, "grid")) break :blk true;
-        if (!std.mem.eql(u8, node.type, "list")) break :blk false;
-        const l = node.layout orelse break :blk false;
-        break :blk std.mem.eql(u8, l.mode, "grid");
-    };
-
-    if (is_grid) {
-        const cols: usize = node.columns orelse if (node.layout) |l| (l.columns orelse 2) else 2;
-        const gap: usize = node.gap orelse if (node.layout) |l| (l.gap orelse 12) else 12;
+    if (std.mem.eql(u8, node.type, "grid")) {
+        const cols: usize = node.columns orelse 2;
+        const gap: usize = node.gap orelse 12;
         renderSubpanelItemsGridContent(node.items, selected_index, cols, gap, flat_index);
         return;
     }
