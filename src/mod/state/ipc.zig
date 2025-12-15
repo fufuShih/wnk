@@ -1,6 +1,7 @@
 const std = @import("std");
 
 pub const PluginResultItem = struct {
+    pluginId: []const u8 = "",
     id: ?[]const u8 = null,
     title: []const u8,
     subtitle: ?[]const u8 = null,
@@ -65,10 +66,22 @@ pub const PanelTopPayload = struct {
     subtitle: ?[]const u8 = null,
 };
 
-pub const PanelMainPayload = struct {
-    /// "list"
+pub const PanelNodePayload = struct {
+    /// "list", "grid", or "box"
     type: []const u8 = "list",
+
+    /// Legacy: when `type == "list"`, a layout with `mode == "grid"` is treated as a grid.
     layout: ?SubpanelLayout = null,
+
+    /// Used when `type == "grid"`.
+    columns: ?usize = null,
+    gap: ?usize = null,
+
+    /// Used when `type == "box"`.
+    dir: ?[]const u8 = null,
+    children: []PanelNodePayload = &.{},
+
+    /// Used when `type == "list"` or `type == "grid"`.
     items: []SubpanelItem = &.{},
 };
 
@@ -82,7 +95,7 @@ pub const SubpanelPayload = struct {
     type: []const u8,
     /// New structured schema.
     top: ?PanelTopPayload = null,
-    main: ?PanelMainPayload = null,
+    main: ?PanelNodePayload = null,
     bottom: ?PanelBottomPayload = null,
 
     /// Legacy fields (still accepted).
@@ -102,8 +115,7 @@ pub const SubpanelView = struct {
     title: []const u8,
     subtitle: []const u8,
     bottom_info: ?[]const u8,
-    layout: ?SubpanelLayout,
-    items: []const SubpanelItem,
+    main: PanelNodePayload,
 };
 
 pub fn currentSubpanelView() ?SubpanelView {
@@ -125,16 +137,26 @@ pub fn currentSubpanelView() ?SubpanelView {
         break :blk null;
     } else p.info;
 
-    const layout: ?SubpanelLayout = if (p.main) |m| m.layout orelse p.layout else p.layout;
-    const items: []const SubpanelItem = if (p.main) |m| m.items else p.items;
+    const main: PanelNodePayload = if (p.main) |m|
+        m
+    else
+        .{ .type = "list", .layout = p.layout, .items = p.items };
 
     return .{
         .title = title,
         .subtitle = subtitle,
         .bottom_info = bottom_info,
-        .layout = layout,
-        .items = items,
+        .main = main,
     };
+}
+
+pub fn subpanelItemsCount(node: PanelNodePayload) usize {
+    if (std.mem.eql(u8, node.type, "box")) {
+        var total: usize = 0;
+        for (node.children) |c| total += subpanelItemsCount(c);
+        return total;
+    }
+    return node.items.len;
 }
 
 pub fn updateSubpanelData(allocator: std.mem.Allocator, json_str: []const u8) !void {

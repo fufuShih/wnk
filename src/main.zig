@@ -246,7 +246,7 @@ fn enterListModeFrame() void {
             if (bun_process) |*proc| {
                 const item_id: []const u8 = item.id orelse item.title;
                 state.ipc.subpanel_pending = true;
-                proc.sendGetSubpanel(item_id) catch |err| {
+                proc.sendGetSubpanel(item.pluginId, item_id) catch |err| {
                     std.debug.print("Failed to request subpanel: {}\n", .{err});
                     state.ipc.subpanel_pending = false;
                 };

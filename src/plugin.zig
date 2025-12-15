@@ -133,6 +133,7 @@ pub const BunProcess = struct {
 
     pub const GetSubpanelMsg = struct {
         type: []const u8 = "getSubpanel",
+        pluginId: []const u8,
         itemId: []const u8,
     };
 
@@ -160,8 +161,8 @@ pub const BunProcess = struct {
         try self.sendMessage(.{ .command = .{ .name = name, .text = text } });
     }
 
-    pub fn sendGetSubpanel(self: *BunProcess, item_id: []const u8) !void {
-        try self.sendMessage(.{ .getSubpanel = .{ .itemId = item_id } });
+    pub fn sendGetSubpanel(self: *BunProcess, plugin_id: []const u8, item_id: []const u8) !void {
+        try self.sendMessage(.{ .getSubpanel = .{ .pluginId = plugin_id, .itemId = item_id } });
     }
 
     pub fn deinit(self: *BunProcess) void {
