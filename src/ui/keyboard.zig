@@ -26,6 +26,7 @@ pub fn handleEvents() !KeyboardResult {
                 } else if (state.canPopPanel()) {
                     state.popPanel();
                     state.focus_on_results = true;
+                    dvui.focusWidget(null, null, null);
                     e.handled = true;
                 } else {
                     return .hide;
@@ -52,6 +53,7 @@ pub fn handleEvents() !KeyboardResult {
                             if (!state.focus_on_results) {
                                 state.focus_on_results = true;
                                 state.selected_index = 0;
+                                dvui.focusWidget(null, null, null);
                             } else {
                                 const sel = search.getSelectedItem();
                                 if (sel) |s| {
@@ -69,6 +71,7 @@ pub fn handleEvents() !KeyboardResult {
                                         },
                                     }
                                     state.command_selected_index = 0;
+                                    dvui.focusWidget(null, null, null);
                                 }
                             }
                             e.handled = true;
@@ -82,6 +85,7 @@ pub fn handleEvents() !KeyboardResult {
                                 state.openCommands();
                             }
                             state.command_selected_index = 0;
+                            dvui.focusWidget(null, null, null);
                             e.handled = true;
                         },
                         .commands => {

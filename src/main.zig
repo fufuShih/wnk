@@ -6,7 +6,9 @@ const SDLBackend = @import("sdl-backend");
 const state = @import("state");
 const keyboard = @import("ui/keyboard.zig");
 const search = @import("ui/search.zig");
-const panels = @import("ui/panels.zig");
+const panel_top = @import("ui/panel/top.zig");
+const panel_main = @import("ui/panel/main.zig");
+const panel_bottom = @import("ui/panel/bottom.zig");
 const commands = @import("ui/commands.zig");
 const plugin = @import("plugin.zig");
 const tray = @import("tray");
@@ -149,7 +151,7 @@ fn handleKeyboardFrame() !?dvui.App.Result {
 fn renderTopArea() !void {
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 20 } });
 
-    try panels.renderPanelTop(currentPanel());
+    try panel_top.renderPanelTop(currentPanel());
 }
 
 fn textForCommand(sel: ?search.SelectedItem) []const u8 {
@@ -298,10 +300,10 @@ fn renderPanelsArea() !void {
     var over = dvui.overlay(@src(), .{ .expand = .both });
     defer over.deinit();
 
-    try panels.renderPanelBody(state.currentPanel());
+    try panel_main.renderPanelBody(state.currentPanel());
 
-    panels.renderPanelBottom(state.currentPanel());
-    try panels.renderFloatingAction(search.getSelectedItem());
+    panel_bottom.renderPanelBottom(state.currentPanel());
+    try panel_main.renderFloatingAction(search.getSelectedItem());
 }
 
 // Executed every frame to draw UI

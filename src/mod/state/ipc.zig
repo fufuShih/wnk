@@ -15,22 +15,33 @@ pub const PluginResultsPayload = struct {
 pub var plugin_results: ?std.json.Parsed(PluginResultsPayload) = null;
 pub var plugin_results_allocator: ?std.mem.Allocator = null;
 pub var results_pending: bool = false;
+pub var plugin_results_json: ?[]u8 = null;
+pub var plugin_results_json_allocator: ?std.mem.Allocator = null;
 
 pub fn updatePluginResults(allocator: std.mem.Allocator, json_str: []const u8) !void {
+    const json_copy = try allocator.dupe(u8, json_str);
+    errdefer allocator.free(json_copy);
+
     // Parse only the results messages; ignore other messages.
-    var parsed = std.json.parseFromSlice(PluginResultsPayload, allocator, json_str, .{ .ignore_unknown_fields = true }) catch return;
+    var parsed = std.json.parseFromSlice(PluginResultsPayload, allocator, json_copy, .{ .ignore_unknown_fields = true }) catch return;
     errdefer parsed.deinit();
 
     if (!std.mem.eql(u8, parsed.value.type, "results")) {
         parsed.deinit();
+        allocator.free(json_copy);
         return;
     }
 
     if (plugin_results) |*old| {
         old.deinit();
     }
+    if (plugin_results_json) |old_json| {
+        (plugin_results_json_allocator orelse allocator).free(old_json);
+    }
     plugin_results = parsed;
     plugin_results_allocator = allocator;
+    plugin_results_json = json_copy;
+    plugin_results_json_allocator = allocator;
     results_pending = false;
 }
 
@@ -84,6 +95,8 @@ pub const SubpanelPayload = struct {
 
 pub var subpanel_data: ?std.json.Parsed(SubpanelPayload) = null;
 pub var subpanel_pending: bool = false;
+pub var subpanel_json: ?[]u8 = null;
+pub var subpanel_json_allocator: ?std.mem.Allocator = null;
 
 pub const SubpanelView = struct {
     title: []const u8,
@@ -125,17 +138,26 @@ pub fn currentSubpanelView() ?SubpanelView {
 }
 
 pub fn updateSubpanelData(allocator: std.mem.Allocator, json_str: []const u8) !void {
-    var parsed = std.json.parseFromSlice(SubpanelPayload, allocator, json_str, .{ .ignore_unknown_fields = true }) catch return;
+    const json_copy = try allocator.dupe(u8, json_str);
+    errdefer allocator.free(json_copy);
+
+    var parsed = std.json.parseFromSlice(SubpanelPayload, allocator, json_copy, .{ .ignore_unknown_fields = true }) catch return;
     errdefer parsed.deinit();
 
     if (!std.mem.eql(u8, parsed.value.type, "subpanel")) {
         parsed.deinit();
+        allocator.free(json_copy);
         return;
     }
 
     if (subpanel_data) |*old| {
         old.deinit();
     }
+    if (subpanel_json) |old_json| {
+        (subpanel_json_allocator orelse allocator).free(old_json);
+    }
     subpanel_data = parsed;
+    subpanel_json = json_copy;
+    subpanel_json_allocator = allocator;
     subpanel_pending = false;
 }

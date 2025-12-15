@@ -40,7 +40,7 @@ async function drainStdinQueue(): Promise<void> {
           try {
             const weather: ResultItem[] = await getWeatherResults(text);
             if (token !== latestQueryToken) return;
-            writeJson({ type: 'results', items: [...weather, ...calc] });
+            writeJson({ type: 'results', items: [...calc, ...weather] });
           } catch {}
         })();
       } else if (msg.type === 'getSubpanel') {

@@ -154,9 +154,19 @@ pub fn deinit() void {
         p.deinit();
         ipc.plugin_results = null;
     }
+    if (ipc.plugin_results_json) |buf| {
+        if (ipc.plugin_results_json_allocator) |a| a.free(buf);
+        ipc.plugin_results_json = null;
+        ipc.plugin_results_json_allocator = null;
+    }
     if (ipc.subpanel_data) |*s| {
         s.deinit();
         ipc.subpanel_data = null;
+    }
+    if (ipc.subpanel_json) |buf| {
+        if (ipc.subpanel_json_allocator) |a| a.free(buf);
+        ipc.subpanel_json = null;
+        ipc.subpanel_json_allocator = null;
     }
 }
 
