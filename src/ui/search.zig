@@ -104,15 +104,15 @@ fn renderResultRow(icon: []const u8, title: []const u8, subtitle: []const u8, id
     var item_box = ui.beginItemRow(.{ .id_extra = id_extra, .is_selected = is_selected });
     defer item_box.deinit();
 
-    dvui.label(@src(), "{s}", .{icon}, .{ .font_style = .title, .id_extra = id_extra });
+    dvui.label(@src(), "{s}", .{icon}, .{ .font = dvui.Font.theme(.title), .id_extra = id_extra });
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .w = 12 }, .id_extra = id_extra + 1000 });
 
     var text_box = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .id_extra = id_extra + 2000 });
     defer text_box.deinit();
 
-    dvui.label(@src(), "{s}", .{title}, .{ .font_style = .title_4, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff }, .id_extra = id_extra + 3000 });
+    dvui.label(@src(), "{s}", .{title}, .{ .font = dvui.Font.theme(.heading), .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff }, .id_extra = id_extra + 3000 });
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 2 }, .id_extra = id_extra + 4000 });
-    dvui.label(@src(), "{s}", .{subtitle}, .{ .font_style = .caption, .color_text = .{ .r = 0x88, .g = 0x88, .b = 0x99 }, .id_extra = id_extra + 5000 });
+    dvui.label(@src(), "{s}", .{subtitle}, .{ .font = dvui.Font.theme(.body).larger(-3), .color_text = .{ .r = 0x88, .g = 0x88, .b = 0x99 }, .id_extra = id_extra + 5000 });
 }
 
 pub fn renderSearch() !void {
@@ -123,7 +123,7 @@ pub fn renderSearch() !void {
     defer search_box.deinit();
 
     // Search icon
-    dvui.label(@src(), ">_ ", .{}, .{ .font_style = .title });
+    dvui.label(@src(), ">_ ", .{}, .{ .font = dvui.Font.theme(.title) });
 
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .w = 10 } });
 
@@ -133,7 +133,7 @@ pub fn renderSearch() !void {
         .placeholder = "Search for apps, files, and more...",
     }, .{
         .expand = .horizontal,
-        .font_style = .title_4,
+        .font = dvui.Font.theme(.heading),
         .color_fill = .{ .r = 0x2a, .g = 0x2a, .b = 0x3e },
         .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff },
     });

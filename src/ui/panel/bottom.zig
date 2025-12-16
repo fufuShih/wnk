@@ -37,7 +37,7 @@ fn renderBottomBar(text: []const u8) void {
     });
     defer bar.deinit();
 
-    dvui.label(@src(), "{s}", .{text}, .{ .font_style = .caption, .color_text = .{ .r = 0xaa, .g = 0xaa, .b = 0xbb } });
+    dvui.label(@src(), "{s}", .{text}, .{ .font = dvui.Font.theme(.body).larger(-3), .color_text = .{ .r = 0xaa, .g = 0xaa, .b = 0xbb } });
 }
 
 pub fn renderPanelBottom(panel: state.Panel) void {

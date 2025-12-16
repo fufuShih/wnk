@@ -50,7 +50,7 @@ fn renderNavHeaderCard(title: []const u8, subtitle: []const u8) void {
     var subtitle_buf: [120]u8 = undefined;
     const subtitle_one = singleLineTruncateInto(&subtitle_buf, subtitle, subtitle_buf.len);
 
-    dvui.label(@src(), "<", .{}, .{ .font_style = .title_3, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
+    dvui.label(@src(), "<", .{}, .{ .font = dvui.Font.theme(.heading), .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .w = 8 } });
 
     ui.headerTitle(title_one);

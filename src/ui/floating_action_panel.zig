@@ -21,7 +21,7 @@ pub fn render(sel: ?search.SelectedItem) !void {
 
     const title: []const u8 = if (sel) |_| "Actions" else "Actions";
 
-    dvui.label(@src(), "{s}", .{title}, .{ .font_style = .title_4, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
+    dvui.label(@src(), "{s}", .{title}, .{ .font = dvui.Font.theme(.heading), .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 6 } });
 
     for (cmds.commands, 0..) |cmd, idx| {
@@ -29,9 +29,9 @@ pub fn render(sel: ?search.SelectedItem) !void {
         var row = ui.optionRow(cmd.title, is_selected);
         defer row.deinit();
 
-        dvui.label(@src(), "{s}", .{cmd.title}, .{ .font_style = .title_4, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
+        dvui.label(@src(), "{s}", .{cmd.title}, .{ .font = dvui.Font.theme(.heading), .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
     }
 
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 6 } });
-    dvui.label(@src(), "Enter: run  W/S: move  Esc: back", .{}, .{ .font_style = .caption, .color_text = .{ .r = 0xaa, .g = 0xaa, .b = 0xbb } });
+    dvui.label(@src(), "Enter: run  W/S: move  Esc: back", .{}, .{ .font = dvui.Font.theme(.body).larger(-3), .color_text = .{ .r = 0xaa, .g = 0xaa, .b = 0xbb } });
 }

@@ -19,9 +19,9 @@ fn renderSubpanelItemCard(item: state.SubpanelItem, id_extra: usize, is_selected
     var text_box = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .id_extra = id_extra });
     defer text_box.deinit();
 
-    dvui.label(@src(), "{s}", .{item.title}, .{ .font_style = .title_4, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff }, .id_extra = id_extra });
+    dvui.label(@src(), "{s}", .{item.title}, .{ .font = dvui.Font.theme(.heading), .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff }, .id_extra = id_extra });
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 2 }, .id_extra = id_extra + 1000 });
-    dvui.label(@src(), "{s}", .{item.subtitle}, .{ .font_style = .caption, .color_text = .{ .r = 0x88, .g = 0x88, .b = 0x99 }, .id_extra = id_extra + 2000 });
+    dvui.label(@src(), "{s}", .{item.subtitle}, .{ .font = dvui.Font.theme(.body).larger(-3), .color_text = .{ .r = 0x88, .g = 0x88, .b = 0x99 }, .id_extra = id_extra + 2000 });
 }
 
 fn renderSubpanelItemsList(items: []const state.SubpanelItem) !void {
@@ -167,7 +167,7 @@ pub fn renderCommand(sel: ?search.SelectedItem) !void {
         var row = ui.optionRow(cmd.title, is_selected);
         defer row.deinit();
 
-        dvui.label(@src(), "{s}", .{cmd.title}, .{ .font_style = .title_4, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
+        dvui.label(@src(), "{s}", .{cmd.title}, .{ .font = dvui.Font.theme(.heading), .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
     }
 }
 

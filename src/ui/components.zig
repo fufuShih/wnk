@@ -66,15 +66,15 @@ pub fn grid(comptime Ctx: type, ctx: Ctx, count: usize, columns: usize, gap: f32
 }
 
 pub fn heading(text: []const u8) void {
-    dvui.label(@src(), "{s}", .{text}, .{ .font_style = .title_3, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
+    dvui.label(@src(), "{s}", .{text}, .{ .font = dvui.Font.theme(.heading), .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
 }
 
 pub fn headerTitle(text: []const u8) void {
-    dvui.label(@src(), "{s}", .{text}, .{ .font_style = .title_3, .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
+    dvui.label(@src(), "{s}", .{text}, .{ .font = dvui.Font.theme(.heading), .color_text = .{ .r = 0xff, .g = 0xff, .b = 0xff } });
 }
 
 pub fn headerSubtitle(text: []const u8) void {
-    dvui.label(@src(), "{s}", .{text}, .{ .font_style = .caption, .color_text = .{ .r = 0x88, .g = 0x88, .b = 0x99 } });
+    dvui.label(@src(), "{s}", .{text}, .{ .font = dvui.Font.theme(.body).larger(-3), .color_text = .{ .r = 0x88, .g = 0x88, .b = 0x99 } });
 }
 
 pub fn optionRow(_label: []const u8, is_selected: bool) *dvui.BoxWidget {
