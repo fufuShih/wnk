@@ -6,7 +6,7 @@
     .dependencies = .{
         .dvui = .{
             .url = "https://github.com/david-vanderson/dvui/archive/refs/heads/main.tar.gz",
-            .hash = "dvui-0.4.0-dev-AQFJmYgA2gA28mpJHWq_1asWXpEwT6fHgZBsu_JPzlh4",
+            .hash = "dvui-0.4.0-dev-AQFJmQzr2QAmt7EtAowpUC_jlBxmoo-kB5bO8xnEgc8p",
         },
     },
     .paths = .{
