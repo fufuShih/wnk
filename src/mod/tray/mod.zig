@@ -4,6 +4,7 @@ const SDLBackend = @import("sdl-backend");
 
 pub const TrayIcon = switch (builtin.os.tag) {
     .windows => @import("windows.zig").TrayIcon,
+    .macos => @import("macos.zig").TrayIcon,
     else => StubTrayIcon,
 };
 

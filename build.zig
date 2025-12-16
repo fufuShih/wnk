@@ -30,6 +30,13 @@ pub fn build(b: *std.Build) void {
     // tray module depends on SDL backend types
     tray_module.addImport("sdl-backend", dvui_dep.module("sdl3"));
 
+    // Link system frameworks for macOS tray
+    if (target.result.os.tag == .macos) {
+        tray_module.linkFramework("AppKit", .{});
+        tray_module.linkFramework("Foundation", .{});
+        tray_module.linkFramework("Carbon", .{}); // For global hotkeys
+    }
+
     // Add imports to the executable's root module
     exe.root_module.addImport("state", state_module);
     exe.root_module.addImport("tray", tray_module);
