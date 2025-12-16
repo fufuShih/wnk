@@ -33,6 +33,7 @@ fn hideWindow() void {
 
 fn showWindow() void {
     if (sdl_window_ptr) |win| {
+        _ = SDLBackend.c.SDL_RestoreWindow(win);
         _ = SDLBackend.c.SDL_ShowWindow(win);
         _ = SDLBackend.c.SDL_RaiseWindow(win);
     }
@@ -128,6 +129,9 @@ fn handleTrayFrame() ?dvui.App.Result {
         icon.checkTrayMessages();
 
         if (icon.pollEvents()) {
+            state.resetPanels();
+            state.focus_on_results = false;
+            dvui.focusWidget(null, null, null);
             showWindow();
         }
         if (icon.shouldExit()) {

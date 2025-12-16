@@ -6,50 +6,18 @@ const id = *opaque {};
 const SEL = *opaque {};
 const Class = *opaque {};
 
-// Carbon Events types for global hotkeys
-const EventHotKeyRef = *opaque {};
-const EventHotKeyID = extern struct {
-    signature: u32,
-    id: u32,
-};
-const EventTypeSpec = extern struct {
-    eventClass: u32,
-    eventKind: u32,
-};
-const EventHandlerRef = *opaque {};
-const EventTargetRef = *opaque {};
-const EventRef = *opaque {};
-const EventHandlerProcPtr = *const fn (EventHandlerRef, EventRef, ?*anyopaque) callconv(.c) i32;
+// NSEvent types and constants for global key monitoring
+const NSEventMask = u64;
+const NSEventModifierFlags = u64;
+const NSEventMaskKeyDown: NSEventMask = 1 << 10;
+const NSEventModifierFlagDeviceIndependentFlagsMask: NSEventModifierFlags = 0xffff0000;
+const NSEventModifierFlagOption: NSEventModifierFlags = 1 << 19;
+const NSEventModifierFlagCommand: NSEventModifierFlags = 1 << 20;
+const NSEventModifierFlagShift: NSEventModifierFlags = 1 << 17;
+const NSEventModifierFlagControl: NSEventModifierFlags = 1 << 18;
 
-// Carbon constants
-const kEventClassKeyboard: u32 = 0x6b657962; // 'keyb'
-const kEventHotKeyPressed: u32 = 5;
-const optionKey: u32 = 0x0800; // Option/Alt modifier
-const cmdKey: u32 = 0x0100; // Command modifier
-const kVK_Space: u32 = 49; // Space key virtual key code
-const noErr: i32 = 0;
-const HOTKEY_SIGNATURE: u32 = 0x776e6b21; // 'wnk!'
-const HOTKEY_ID_SHOW: u32 = 1;
-
-// Carbon Events API
-extern "c" fn GetApplicationEventTarget() EventTargetRef;
-extern "c" fn InstallEventHandler(
-    inTarget: EventTargetRef,
-    inHandler: EventHandlerProcPtr,
-    inNumTypes: u32,
-    inList: [*]const EventTypeSpec,
-    inUserData: ?*anyopaque,
-    outRef: ?*EventHandlerRef,
-) callconv(.c) i32;
-extern "c" fn RegisterEventHotKey(
-    inHotKeyCode: u32,
-    inHotKeyModifiers: u32,
-    inHotKeyID: EventHotKeyID,
-    inTarget: EventTargetRef,
-    inOptions: u32,
-    outRef: *EventHotKeyRef,
-) callconv(.c) i32;
-extern "c" fn UnregisterEventHotKey(inHotKey: EventHotKeyRef) callconv(.c) i32;
+// Key codes
+const kVK_Space: u16 = 49;
 
 // Objective-C runtime functions
 extern "c" fn objc_getClass(name: [*:0]const u8) ?Class;
@@ -89,11 +57,11 @@ const NSVariableStatusItemLength: f64 = -1.0;
 
 // Global state
 var g_should_exit: bool = false;
-var g_should_show: bool = false;
+var g_show_requested: std.atomic.Value(u8) = std.atomic.Value(u8).init(0);
 var g_status_item: ?id = null;
 var g_app_window: ?*SDLBackend.c.SDL_Window = null;
-var g_hotkey_ref: ?EventHotKeyRef = null;
-var g_event_handler_ref: ?EventHandlerRef = null;
+var g_event_monitor: ?id = null;
+var g_sdl_wake_event_type: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
 
 // Selectors (cached)
 var sel_sharedApplication: SEL = undefined;
@@ -143,6 +111,44 @@ fn createNSString(str: [*:0]const u8) ?id {
     return msgSend(?id, NSString, sel_stringWithUTF8String, .{str});
 }
 
+fn ensureWakeEventRegistered() void {
+    if (g_sdl_wake_event_type.load(.acquire) != 0) return;
+    const t: u32 = SDLBackend.c.SDL_RegisterEvents(1);
+    if (t != 0) g_sdl_wake_event_type.store(t, .release);
+}
+
+fn postWakeEvent() void {
+    const t = g_sdl_wake_event_type.load(.acquire);
+    if (t == 0) return;
+    var evt: SDLBackend.c.SDL_Event = undefined;
+    @memset(std.mem.asBytes(&evt), 0);
+    evt.type = t;
+    _ = SDLBackend.c.SDL_PushEvent(&evt);
+}
+
+fn requestShow() void {
+    g_show_requested.store(1, .release);
+    postWakeEvent();
+}
+
+fn activateAndRaiseWindow() void {
+    // Cocoa activation helps ensure the window becomes frontmost after being hidden.
+    const NSApplication = objc_getClass("NSApplication") orelse return;
+    const app = msgSend(?id, NSApplication, sel_sharedApplication, .{}) orelse return;
+
+    const sel_unhide = sel_registerName("unhide:");
+    msgSend(void, app, sel_unhide, .{@as(?id, null)});
+
+    const sel_activate = sel_registerName("activateIgnoringOtherApps:");
+    msgSend(void, app, sel_activate, .{true});
+
+    if (g_app_window) |window| {
+        _ = SDLBackend.c.SDL_RestoreWindow(window);
+        _ = SDLBackend.c.SDL_ShowWindow(window);
+        _ = SDLBackend.c.SDL_RaiseWindow(window);
+    }
+}
+
 pub const TrayIcon = struct {
     status_item: ?id,
     menu: ?id,
@@ -152,7 +158,8 @@ pub const TrayIcon = struct {
 
         g_app_window = sdl_window;
         g_should_exit = false;
-        g_should_show = false;
+        g_show_requested.store(0, .release);
+        ensureWakeEventRegistered();
 
         // Get the system status bar
         const NSStatusBar = objc_getClass("NSStatusBar") orelse return error.FailedToGetNSStatusBar;
@@ -243,8 +250,8 @@ pub const TrayIcon = struct {
 
     pub fn pollEvents(self: *TrayIcon) bool {
         _ = self;
-        if (g_should_show) {
-            g_should_show = false;
+        if (g_show_requested.swap(0, .acq_rel) != 0) {
+            activateAndRaiseWindow();
             return true;
         }
         return false;
@@ -345,13 +352,7 @@ fn trayShowWindowImp(self: id, _sel: SEL, sender: id) callconv(.c) void {
     _ = self;
     _ = _sel;
     _ = sender;
-
-    g_should_show = true;
-
-    // Bring app to front
-    if (g_app_window) |window| {
-        _ = SDLBackend.c.SDL_RaiseWindow(window);
-    }
+    requestShow();
 }
 
 fn trayQuitImp(self: id, _sel: SEL, sender: id) callconv(.c) void {
@@ -367,96 +368,88 @@ fn trayQuitImp(self: id, _sel: SEL, sender: id) callconv(.c) void {
     _ = SDLBackend.c.SDL_PushEvent(&quit_event);
 }
 
-// Global hotkey handler
-fn hotkeyHandler(nextHandler: EventHandlerRef, theEvent: EventRef, userData: ?*anyopaque) callconv(.c) i32 {
-    _ = nextHandler;
-    _ = theEvent;
-    _ = userData;
+// Block type for NSEvent handler
+const BlockDescriptor = extern struct {
+    reserved: c_ulong,
+    size: c_ulong,
+};
 
-    g_should_show = true;
+const BlockLiteral = extern struct {
+    isa: ?*anyopaque,
+    flags: c_int,
+    reserved: c_int,
+    invoke: *const fn (*BlockLiteral, id) callconv(.c) void,
+    descriptor: *const BlockDescriptor,
+};
 
-    // Bring app to front
-    if (g_app_window) |window| {
-        _ = SDLBackend.c.SDL_RaiseWindow(window);
-    }
+// Block class reference
+extern "c" const _NSConcreteGlobalBlock: anyopaque;
 
-    // Also activate the application
-    const NSApplication = objc_getClass("NSApplication");
-    if (NSApplication) |cls| {
-        const app = msgSend(?id, cls, sel_sharedApplication, .{});
-        if (app) |a| {
-            const sel_activateIgnoringOtherApps = sel_registerName("activateIgnoringOtherApps:");
-            msgSend(void, a, sel_activateIgnoringOtherApps, .{true});
-        }
-    }
+fn hotkeyBlockInvoke(block: *BlockLiteral, event: id) callconv(.c) void {
+    _ = block;
 
-    return noErr;
-}
+    // Get keyCode from NSEvent
+    const sel_keyCode = sel_registerName("keyCode");
+    const keycode: u16 = @intCast(msgSend(u64, event, sel_keyCode, .{}));
 
-fn registerGlobalHotkey() void {
-    // Install event handler for hotkey events
-    const eventTypes = [_]EventTypeSpec{
-        .{ .eventClass = kEventClassKeyboard, .eventKind = kEventHotKeyPressed },
-    };
-
-    var handler_ref: EventHandlerRef = undefined;
-    const result = InstallEventHandler(
-        GetApplicationEventTarget(),
-        hotkeyHandler,
-        1,
-        &eventTypes,
-        null,
-        &handler_ref,
-    );
-
-    if (result != noErr) {
-        std.debug.print("Warning: Failed to install hotkey event handler (error: {})\n", .{result});
+    // Check if it's Space key
+    if (keycode != kVK_Space) {
         return;
     }
-    g_event_handler_ref = handler_ref;
 
-    // Register Option+Space hotkey
-    const hotkeyID = EventHotKeyID{
-        .signature = HOTKEY_SIGNATURE,
-        .id = HOTKEY_ID_SHOW,
+    // Get modifier flags
+    const sel_modifierFlags = sel_registerName("modifierFlags");
+    const flags_raw: NSEventModifierFlags = msgSend(NSEventModifierFlags, event, sel_modifierFlags, .{});
+    const flags: NSEventModifierFlags = flags_raw & NSEventModifierFlagDeviceIndependentFlagsMask;
+
+    // Option+Space only (ignore CapsLock/Fn/etc).
+    const option_pressed = (flags & NSEventModifierFlagOption) != 0;
+    const disallowed = NSEventModifierFlagCommand | NSEventModifierFlagControl | NSEventModifierFlagShift;
+    const other_mods = (flags & disallowed) != 0;
+
+    if (option_pressed and !other_mods) {
+        requestShow();
+    }
+}
+
+const block_descriptor = BlockDescriptor{
+    .reserved = 0,
+    .size = @sizeOf(BlockLiteral),
+};
+
+var hotkey_block = BlockLiteral{
+    .isa = @constCast(&_NSConcreteGlobalBlock),
+    .flags = (1 << 28), // BLOCK_IS_GLOBAL
+    .reserved = 0,
+    .invoke = hotkeyBlockInvoke,
+    .descriptor = &block_descriptor,
+};
+
+fn registerGlobalHotkey() void {
+    const NSEvent = objc_getClass("NSEvent") orelse {
+        std.debug.print("Warning: Failed to get NSEvent class\n", .{});
+        return;
     };
 
-    var hotkey_ref: EventHotKeyRef = undefined;
-    const reg_result = RegisterEventHotKey(
-        kVK_Space,
-        optionKey,
-        hotkeyID,
-        GetApplicationEventTarget(),
-        0,
-        &hotkey_ref,
-    );
+    // Use addGlobalMonitorForEventsMatchingMask:handler:
+    const sel_addGlobalMonitor = sel_registerName("addGlobalMonitorForEventsMatchingMask:handler:");
 
-    if (reg_result != noErr) {
-        std.debug.print("Warning: Option+Space hotkey registration failed (error: {}), trying Cmd+Option+Space\n", .{reg_result});
+    const monitor = msgSend(?id, NSEvent, sel_addGlobalMonitor, .{ NSEventMaskKeyDown, &hotkey_block });
 
-        // Try Cmd+Option+Space as fallback
-        const fallback_result = RegisterEventHotKey(
-            kVK_Space,
-            optionKey | cmdKey,
-            hotkeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotkey_ref,
-        );
-
-        if (fallback_result != noErr) {
-            std.debug.print("Warning: Cmd+Option+Space also failed (error: {})\n", .{fallback_result});
-            return;
-        }
+    if (monitor == null) {
+        std.debug.print("Warning: Failed to create global key monitor. Please grant Input Monitoring (and/or Accessibility) permissions in System Settings > Privacy & Security.\n", .{});
+        return;
     }
 
-    g_hotkey_ref = hotkey_ref;
-    std.debug.print("Global hotkey registered successfully\n", .{});
+    g_event_monitor = monitor;
+    std.debug.print("Global hotkey (Option+Space) registered successfully\n", .{});
 }
 
 fn unregisterGlobalHotkey() void {
-    if (g_hotkey_ref) |ref| {
-        _ = UnregisterEventHotKey(ref);
-        g_hotkey_ref = null;
+    if (g_event_monitor) |monitor| {
+        const NSEvent = objc_getClass("NSEvent") orelse return;
+        const sel_removeMonitor = sel_registerName("removeMonitor:");
+        msgSend(void, NSEvent, sel_removeMonitor, .{monitor});
+        g_event_monitor = null;
     }
 }

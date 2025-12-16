@@ -34,7 +34,8 @@ pub fn build(b: *std.Build) void {
     if (target.result.os.tag == .macos) {
         tray_module.linkFramework("AppKit", .{});
         tray_module.linkFramework("Foundation", .{});
-        tray_module.linkFramework("Carbon", .{}); // For global hotkeys
+        tray_module.linkFramework("CoreGraphics", .{}); // Input monitoring / (optional) event tap APIs
+        tray_module.linkFramework("CoreFoundation", .{}); // CFRunLoop utilities
     }
 
     // Add imports to the executable's root module
