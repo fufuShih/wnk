@@ -31,7 +31,6 @@ src/
     search.zig       - Search query + selection helpers
     keyboard.zig     - Input handling & navigation
     actions.zig      - Action overlay context helpers (hasCommand/canOpenOverlay)
-    commands.zig     - Command definitions (sent to Bun)
 ```
 
 ## IPC

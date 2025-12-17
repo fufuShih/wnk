@@ -2,7 +2,6 @@ const dvui = @import("dvui");
 const state = @import("state");
 
 const actions = @import("../actions.zig");
-const commands = @import("../commands.zig");
 const regions = @import("../regions.zig");
 const style = @import("../style.zig");
 
@@ -104,7 +103,7 @@ fn clampActionSelection(actions_count: usize) void {
     }
 }
 
-fn renderActionList(list: []const commands.Command) void {
+fn renderActionList(list: []const actions.Command) void {
     clampActionSelection(list.len);
 
     for (list, 0..) |cmd, idx| {

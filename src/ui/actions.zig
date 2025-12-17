@@ -2,7 +2,16 @@ const std = @import("std");
 const state = @import("state");
 
 const search = @import("search.zig");
-const commands = @import("commands.zig");
+
+pub const Command = struct {
+    // Sent to Bun as { type: "command", name, text }
+    name: []const u8,
+    title: []const u8,
+};
+
+const action_commands = [_]Command{
+    .{ .name = "setSearchText", .title = "Use as query" },
+};
 
 /// Action overlay context helpers.
 /// The overlay is not a panel/region by itself; it depends on the *currently focused* main content.
@@ -42,12 +51,12 @@ pub fn commandText() []const u8 {
 
 /// Returns the action list for the current selection.
 /// This is where per-region / per-item actions can be dispatched in the future.
-pub fn actions() []const commands.Command {
-    return commands.commands[0..];
+pub fn actions() []const Command {
+    return action_commands[0..];
 }
 
 /// Returns the action at the given index for the current selection.
-pub fn commandAt(index: usize) ?commands.Command {
+pub fn commandAt(index: usize) ?Command {
     const list = actions();
     if (index >= list.len) return null;
     return list[index];
