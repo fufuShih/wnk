@@ -4,14 +4,15 @@ const SDLBackend = @import("sdl-backend");
 
 // Import modules
 const state = @import("state");
+const plugin = @import("plugin");
+const tray = @import("tray");
+
 const keyboard = @import("ui/keyboard.zig");
 const search = @import("ui/search.zig");
 const panel_top = @import("ui/panel/top.zig");
 const panel_main = @import("ui/panel/main.zig");
 const panel_bottom = @import("ui/panel/bottom.zig");
 const commands = @import("ui/commands.zig");
-const plugin = @import("plugin.zig");
-const tray = @import("tray");
 
 var last_query_hash: u64 = 0;
 var last_query_change_ms: i64 = 0;

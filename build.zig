@@ -26,6 +26,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const plugin_module = b.createModule(.{
+        .root_source_file = b.path("src/mod/plugin/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // tray module depends on SDL backend types
     tray_module.addImport("sdl-backend", dvui_dep.module("sdl3"));
@@ -41,6 +46,7 @@ pub fn build(b: *std.Build) void {
     // Add imports to the executable's root module
     exe.root_module.addImport("state", state_module);
     exe.root_module.addImport("tray", tray_module);
+    exe.root_module.addImport("plugin", plugin_module);
 
     // Third party dependencies
     exe.root_module.addImport("dvui", dvui_dep.module("dvui_sdl3"));
