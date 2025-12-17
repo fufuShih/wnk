@@ -6,6 +6,12 @@ const id = *opaque {};
 const SEL = *opaque {};
 const Class = *opaque {};
 
+// CoreGraphics window level
+const CGWindowLevel = i32;
+const CGWindowLevelKey = i32;
+extern "c" fn CGWindowLevelForKey(key: CGWindowLevelKey) callconv(.c) CGWindowLevel;
+const kCGStatusWindowLevelKey: CGWindowLevelKey = 9;
+
 // NSEvent types and constants for global key monitoring
 const NSEventMask = u64;
 const NSEventModifierFlags = u64;
@@ -15,6 +21,14 @@ const NSEventModifierFlagOption: NSEventModifierFlags = 1 << 19;
 const NSEventModifierFlagCommand: NSEventModifierFlags = 1 << 20;
 const NSEventModifierFlagShift: NSEventModifierFlags = 1 << 17;
 const NSEventModifierFlagControl: NSEventModifierFlags = 1 << 18;
+
+// NSWindow collection behavior (matches AppKit's NSWindowCollectionBehavior)
+const NSWindowCollectionBehavior = u64;
+const NSWindowCollectionBehaviorCanJoinAllSpaces: NSWindowCollectionBehavior = 1 << 0;
+const NSWindowCollectionBehaviorMoveToActiveSpace: NSWindowCollectionBehavior = 1 << 1;
+const NSWindowCollectionBehaviorTransient: NSWindowCollectionBehavior = 1 << 3;
+const NSWindowCollectionBehaviorIgnoresCycle: NSWindowCollectionBehavior = 1 << 6;
+const NSWindowCollectionBehaviorFullScreenAuxiliary: NSWindowCollectionBehavior = 1 << 8;
 
 // Key codes
 const kVK_Space: u16 = 49;
@@ -51,6 +65,7 @@ inline fn msgSend(comptime ReturnType: type, target: anytype, sel: SEL, args: an
 
 // NSApplication activation policy
 const NSApplicationActivationPolicyRegular: i64 = 0;
+const NSApplicationActivationPolicyAccessory: i64 = 1;
 
 // NSStatusBar constants - variable length from center
 const NSVariableStatusItemLength: f64 = -1.0;
@@ -60,6 +75,7 @@ var g_should_exit: bool = false;
 var g_show_requested: std.atomic.Value(u8) = std.atomic.Value(u8).init(0);
 var g_status_item: ?id = null;
 var g_app_window: ?*SDLBackend.c.SDL_Window = null;
+var g_app_ns_window: ?id = null;
 var g_event_monitor: ?id = null;
 var g_sdl_wake_event_type: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
 
@@ -80,6 +96,12 @@ var sel_stringWithUTF8String: SEL = undefined;
 var sel_button: SEL = undefined;
 var sel_removeStatusItem: SEL = undefined;
 var sel_release: SEL = undefined;
+var sel_collectionBehavior: SEL = undefined;
+var sel_setCollectionBehavior: SEL = undefined;
+var sel_setLevel: SEL = undefined;
+var sel_orderFrontRegardless: SEL = undefined;
+var sel_makeKeyAndOrderFront: SEL = undefined;
+var sel_setHidesOnDeactivate: SEL = undefined;
 
 var selectors_initialized: bool = false;
 
@@ -102,6 +124,12 @@ fn initSelectors() void {
     sel_button = sel_registerName("button");
     sel_removeStatusItem = sel_registerName("removeStatusItem:");
     sel_release = sel_registerName("release");
+    sel_collectionBehavior = sel_registerName("collectionBehavior");
+    sel_setCollectionBehavior = sel_registerName("setCollectionBehavior:");
+    sel_setLevel = sel_registerName("setLevel:");
+    sel_orderFrontRegardless = sel_registerName("orderFrontRegardless");
+    sel_makeKeyAndOrderFront = sel_registerName("makeKeyAndOrderFront:");
+    sel_setHidesOnDeactivate = sel_registerName("setHidesOnDeactivate:");
 
     selectors_initialized = true;
 }
@@ -131,6 +159,36 @@ fn requestShow() void {
     postWakeEvent();
 }
 
+fn getCocoaWindowFromSDL(window: *SDLBackend.c.SDL_Window) ?id {
+    const SDL_PROP_WINDOW_COCOA_WINDOW_POINTER = "SDL.window.cocoa.window";
+    const ptr = SDLBackend.c.SDL_GetPointerProperty(
+        SDLBackend.c.SDL_GetWindowProperties(window),
+        SDL_PROP_WINDOW_COCOA_WINDOW_POINTER,
+        null,
+    ) orelse return null;
+    return @ptrCast(@alignCast(ptr));
+}
+
+fn configureLauncherWindow(ns_window: id) void {
+    // Keep the launcher on the current Space (including fullscreen) instead of
+    // switching to the Space where the window was last shown.
+    const desired_behavior: NSWindowCollectionBehavior =
+        NSWindowCollectionBehaviorCanJoinAllSpaces |
+        NSWindowCollectionBehaviorFullScreenAuxiliary |
+        NSWindowCollectionBehaviorTransient |
+        NSWindowCollectionBehaviorIgnoresCycle;
+
+    const current_behavior: NSWindowCollectionBehavior = msgSend(NSWindowCollectionBehavior, ns_window, sel_collectionBehavior, .{});
+    msgSend(void, ns_window, sel_setCollectionBehavior, .{current_behavior | desired_behavior});
+
+    // Raise above normal windows (Spotlight/Raycast-like).
+    const level: i64 = @intCast(CGWindowLevelForKey(kCGStatusWindowLevelKey));
+    msgSend(void, ns_window, sel_setLevel, .{level});
+
+    // Auto-hide when the user clicks away.
+    msgSend(void, ns_window, sel_setHidesOnDeactivate, .{true});
+}
+
 fn activateAndRaiseWindow() void {
     // Cocoa activation helps ensure the window becomes frontmost after being hidden.
     const NSApplication = objc_getClass("NSApplication") orelse return;
@@ -139,13 +197,28 @@ fn activateAndRaiseWindow() void {
     const sel_unhide = sel_registerName("unhide:");
     msgSend(void, app, sel_unhide, .{@as(?id, null)});
 
-    const sel_activate = sel_registerName("activateIgnoringOtherApps:");
-    msgSend(void, app, sel_activate, .{true});
-
+    // Show/order the window first. The window is configured to join all spaces,
+    // so it appears on the current Space (prevents "Space jumping").
     if (g_app_window) |window| {
+        if (g_app_ns_window == null) {
+            g_app_ns_window = getCocoaWindowFromSDL(window);
+            if (g_app_ns_window) |ns_window| configureLauncherWindow(ns_window);
+        }
+
         _ = SDLBackend.c.SDL_RestoreWindow(window);
         _ = SDLBackend.c.SDL_ShowWindow(window);
         _ = SDLBackend.c.SDL_RaiseWindow(window);
+    }
+
+    if (g_app_ns_window) |ns_window| {
+        msgSend(void, ns_window, sel_orderFrontRegardless, .{});
+    }
+
+    const sel_activate = sel_registerName("activateIgnoringOtherApps:");
+    msgSend(void, app, sel_activate, .{true});
+
+    if (g_app_ns_window) |ns_window| {
+        msgSend(void, ns_window, sel_makeKeyAndOrderFront, .{@as(?id, null)});
     }
 }
 
@@ -157,6 +230,15 @@ pub const TrayIcon = struct {
         initSelectors();
 
         g_app_window = sdl_window;
+        g_app_ns_window = getCocoaWindowFromSDL(sdl_window);
+        if (g_app_ns_window) |ns_window| configureLauncherWindow(ns_window);
+
+        // Make this a menu-bar style app (like Spotlight/Raycast): no Dock icon / Cmd-Tab entry.
+        const NSApplication = objc_getClass("NSApplication") orelse return error.FailedToGetNSApplication;
+        const app = msgSend(?id, NSApplication, sel_sharedApplication, .{}) orelse return error.FailedToGetNSApplication;
+        const sel_setActivationPolicy = sel_registerName("setActivationPolicy:");
+        _ = msgSend(bool, app, sel_setActivationPolicy, .{NSApplicationActivationPolicyAccessory});
+
         g_should_exit = false;
         g_show_requested.store(0, .release);
         ensureWakeEventRegistered();
