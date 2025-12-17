@@ -1,6 +1,7 @@
 const dvui = @import("dvui");
 
 const style = @import("style.zig");
+const text_utils = @import("utils/text.zig");
 
 /// Region-scoped UI primitives.
 /// This file keeps the API separated by region (top/main/bottom) while avoiding excessive file hopping.
@@ -33,30 +34,6 @@ pub const top = struct {
         dvui.label(@src(), "{s}", .{text}, .{ .font = dvui.Font.theme(.body).larger(-3), .color_text = style.colors.text_muted });
     }
 
-    fn singleLineTruncateInto(buf: []u8, text: []const u8, max_bytes: usize) []const u8 {
-        if (max_bytes == 0) return "";
-
-        var out_len: usize = 0;
-        for (text) |b| {
-            if (out_len >= max_bytes) break;
-            const c: u8 = switch (b) {
-                '\n', '\r', '\t' => ' ',
-                else => b,
-            };
-            buf[out_len] = c;
-            out_len += 1;
-        }
-
-        if (text.len <= max_bytes) return buf[0..out_len];
-        if (out_len < 3) return buf[0..out_len];
-
-        // Replace last 3 bytes with "..." to hint truncation.
-        buf[out_len - 3] = '.';
-        buf[out_len - 2] = '.';
-        buf[out_len - 1] = '.';
-        return buf[0..out_len];
-    }
-
     /// Header style for non-root panels: a back affordance and context text.
     pub fn renderNavHeader(title: []const u8, subtitle: []const u8) void {
         var box = beginCard(.{ .margin = style.layout.header_margin });
@@ -66,9 +43,9 @@ pub const top = struct {
         defer row.deinit();
 
         var title_buf: [96]u8 = undefined;
-        const title_one = singleLineTruncateInto(&title_buf, title, title_buf.len);
+        const title_one = text_utils.singleLineTruncateInto(&title_buf, title, title_buf.len);
         var subtitle_buf: [120]u8 = undefined;
-        const subtitle_one = singleLineTruncateInto(&subtitle_buf, subtitle, subtitle_buf.len);
+        const subtitle_one = text_utils.singleLineTruncateInto(&subtitle_buf, subtitle, subtitle_buf.len);
 
         dvui.label(@src(), "<", .{}, .{ .font = dvui.Font.theme(.heading), .color_text = style.colors.text_primary });
         _ = dvui.spacer(@src(), .{ .min_size_content = .{ .w = 8 } });

@@ -1,5 +1,6 @@
 const std = @import("std");
 const state = @import("state");
+const text_utils = @import("utils/text.zig");
 
 pub const SelectedItem = union(enum) {
     plugin: state.PluginResultItem,
@@ -11,30 +12,10 @@ pub fn currentQuery() []const u8 {
     return state.search_buffer[0..state.search_len];
 }
 
-fn toLowerByte(c: u8) u8 {
-    return if (c >= 'A' and c <= 'Z') c + 32 else c;
-}
-
-fn containsIgnoreCase(haystack: []const u8, needle: []const u8) bool {
-    if (needle.len == 0) return true;
-    if (needle.len > haystack.len) return false;
-
-    var i: usize = 0;
-    outer: while (i <= haystack.len - needle.len) : (i += 1) {
-        for (needle, 0..) |nc, j| {
-            if (toLowerByte(haystack[i + j]) != toLowerByte(nc)) {
-                continue :outer;
-            }
-        }
-        return true;
-    }
-    return false;
-}
-
 fn matchesSearch(result_title: []const u8, result_subtitle: []const u8, query: []const u8) bool {
     if (query.len == 0) return true;
-    return containsIgnoreCase(result_title, query) or
-        containsIgnoreCase(result_subtitle, query);
+    return text_utils.containsIgnoreCase(result_title, query) or
+        text_utils.containsIgnoreCase(result_subtitle, query);
 }
 
 /// Convenience helper for renderers: checks whether an item matches the current query.

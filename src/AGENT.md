@@ -27,6 +27,7 @@ src/
       action_overlay.zig
     regions.zig      - Region-scoped UI primitives (top/main/bottom)
     style.zig        - Shared UI styling constants
+    utils/           - Small UI helper modules (text, etc.)
     search.zig       - Search query + selection helpers
     keyboard.zig     - Input handling & navigation
     actions.zig      - Action overlay context helpers (hasCommand/canOpenOverlay)
