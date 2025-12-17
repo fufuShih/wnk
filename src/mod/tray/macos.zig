@@ -1,5 +1,6 @@
 const std = @import("std");
 const SDLBackend = @import("sdl-backend");
+const signals = @import("signals.zig");
 
 // Objective-C runtime types
 const id = *opaque {};
@@ -25,7 +26,6 @@ const NSEventModifierFlagControl: NSEventModifierFlags = 1 << 18;
 // NSWindow collection behavior (matches AppKit's NSWindowCollectionBehavior)
 const NSWindowCollectionBehavior = u64;
 const NSWindowCollectionBehaviorCanJoinAllSpaces: NSWindowCollectionBehavior = 1 << 0;
-const NSWindowCollectionBehaviorMoveToActiveSpace: NSWindowCollectionBehavior = 1 << 1;
 const NSWindowCollectionBehaviorTransient: NSWindowCollectionBehavior = 1 << 3;
 const NSWindowCollectionBehaviorIgnoresCycle: NSWindowCollectionBehavior = 1 << 6;
 const NSWindowCollectionBehaviorFullScreenAuxiliary: NSWindowCollectionBehavior = 1 << 8;
@@ -71,11 +71,10 @@ const NSApplicationActivationPolicyAccessory: i64 = 1;
 const NSVariableStatusItemLength: f64 = -1.0;
 
 // Global state
-var g_should_exit: bool = false;
-var g_show_requested: std.atomic.Value(u8) = std.atomic.Value(u8).init(0);
-var g_status_item: ?id = null;
+var g_signals: signals.TraySignals = .{};
 var g_app_window: ?*SDLBackend.c.SDL_Window = null;
 var g_app_ns_window: ?id = null;
+var g_menu_delegate: ?id = null;
 var g_event_monitor: ?id = null;
 var g_sdl_wake_event_type: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
 
@@ -85,12 +84,10 @@ var sel_systemStatusBar: SEL = undefined;
 var sel_statusItemWithLength: SEL = undefined;
 var sel_setTitle: SEL = undefined;
 var sel_setMenu: SEL = undefined;
-var sel_setAction: SEL = undefined;
 var sel_setTarget: SEL = undefined;
 var sel_alloc: SEL = undefined;
 var sel_init: SEL = undefined;
 var sel_addItem: SEL = undefined;
-var sel_addItemWithTitle: SEL = undefined;
 var sel_separatorItem: SEL = undefined;
 var sel_stringWithUTF8String: SEL = undefined;
 var sel_button: SEL = undefined;
@@ -113,12 +110,10 @@ fn initSelectors() void {
     sel_statusItemWithLength = sel_registerName("statusItemWithLength:");
     sel_setTitle = sel_registerName("setTitle:");
     sel_setMenu = sel_registerName("setMenu:");
-    sel_setAction = sel_registerName("setAction:");
     sel_setTarget = sel_registerName("setTarget:");
     sel_alloc = sel_registerName("alloc");
     sel_init = sel_registerName("init");
     sel_addItem = sel_registerName("addItem:");
-    sel_addItemWithTitle = sel_registerName("addItemWithTitle:action:keyEquivalent:");
     sel_separatorItem = sel_registerName("separatorItem");
     sel_stringWithUTF8String = sel_registerName("stringWithUTF8String:");
     sel_button = sel_registerName("button");
@@ -155,7 +150,7 @@ fn postWakeEvent() void {
 }
 
 fn requestShow() void {
-    g_show_requested.store(1, .release);
+    g_signals.requestShow();
     postWakeEvent();
 }
 
@@ -239,8 +234,7 @@ pub const TrayIcon = struct {
         const sel_setActivationPolicy = sel_registerName("setActivationPolicy:");
         _ = msgSend(bool, app, sel_setActivationPolicy, .{NSApplicationActivationPolicyAccessory});
 
-        g_should_exit = false;
-        g_show_requested.store(0, .release);
+        g_signals.reset();
         ensureWakeEventRegistered();
 
         // Get the system status bar
@@ -295,11 +289,8 @@ pub const TrayIcon = struct {
         // Set the menu
         msgSend(void, status_item, sel_setMenu, .{menu});
 
-        // Store globally for callback access
-        g_status_item = status_item;
-
         // Register for menu item callbacks using a delegate
-        try setupMenuDelegate(menu);
+        setupMenuDelegate(menu);
 
         // Register global hotkey (Option+Space)
         registerGlobalHotkey();
@@ -327,12 +318,18 @@ pub const TrayIcon = struct {
             self.menu = null;
         }
 
-        g_status_item = null;
+        if (g_menu_delegate) |delegate| {
+            msgSend(void, delegate, sel_release, .{});
+            g_menu_delegate = null;
+        }
+
+        g_app_window = null;
+        g_app_ns_window = null;
     }
 
     pub fn pollEvents(self: *TrayIcon) bool {
         _ = self;
-        if (g_show_requested.swap(0, .acq_rel) != 0) {
+        if (g_signals.takeShow()) {
             activateAndRaiseWindow();
             return true;
         }
@@ -341,7 +338,7 @@ pub const TrayIcon = struct {
 
     pub fn shouldExit(self: *TrayIcon) bool {
         _ = self;
-        return g_should_exit;
+        return g_signals.shouldExit();
     }
 
     pub fn checkTrayMessages(self: *TrayIcon) void {
@@ -351,50 +348,50 @@ pub const TrayIcon = struct {
 };
 
 // Menu delegate for handling menu item actions
-fn setupMenuDelegate(menu: ?id) !void {
-    _ = menu;
+fn setupMenuDelegate(menu: id) void {
     // The delegate is set up via Objective-C runtime class creation
     // For simplicity, we'll poll the menu state instead
     // Menu item targets are typically handled by NSApplication's delegate
     // or by creating a custom Objective-C class at runtime
 
     // Create a delegate class dynamically
-    const delegate_class = createDelegateClass() orelse return;
-    const delegate_alloc = msgSend(?id, delegate_class, sel_alloc, .{}) orelse return;
-    const delegate = msgSend(?id, delegate_alloc, sel_init, .{}) orelse return;
+    const delegate_class = createDelegateClass() orelse {
+        std.debug.print("Warning: Failed to create tray menu delegate class\n", .{});
+        return;
+    };
+    const delegate_alloc = msgSend(?id, delegate_class, sel_alloc, .{}) orelse {
+        std.debug.print("Warning: Failed to alloc tray menu delegate\n", .{});
+        return;
+    };
+    const delegate = msgSend(?id, delegate_alloc, sel_init, .{}) orelse {
+        std.debug.print("Warning: Failed to init tray menu delegate\n", .{});
+        return;
+    };
 
-    // Set the delegate as the application delegate for menu actions
-    const NSApplication = objc_getClass("NSApplication") orelse return;
-    const app = msgSend(?id, NSApplication, sel_sharedApplication, .{}) orelse return;
+    if (g_menu_delegate) |old| {
+        msgSend(void, old, sel_release, .{});
+    }
+    g_menu_delegate = delegate;
 
     // We need to set the menu item targets to our delegate
     const sel_itemArray = sel_registerName("itemArray");
     const sel_count = sel_registerName("count");
     const sel_objectAtIndex = sel_registerName("objectAtIndex:");
 
-    if (g_status_item) |status_item| {
-        const inner_menu = msgSend(?id, status_item, sel_registerName("menu"), .{});
-        if (inner_menu) |m| {
-            const items = msgSend(?id, m, sel_itemArray, .{});
-            if (items) |arr| {
-                const count = msgSend(u64, arr, sel_count, .{});
-                var i: u64 = 0;
-                while (i < count) : (i += 1) {
-                    const item = msgSend(?id, arr, sel_objectAtIndex, .{i});
-                    if (item) |it| {
-                        // Check if it's not a separator
-                        const sel_isSeparator = sel_registerName("isSeparatorItem");
-                        const is_sep = msgSend(bool, it, sel_isSeparator, .{});
-                        if (!is_sep) {
-                            msgSend(void, it, sel_setTarget, .{delegate});
-                        }
-                    }
-                }
+    const items = msgSend(?id, menu, sel_itemArray, .{}) orelse return;
+    const count = msgSend(u64, items, sel_count, .{});
+    var i: u64 = 0;
+    while (i < count) : (i += 1) {
+        const item = msgSend(?id, items, sel_objectAtIndex, .{i});
+        if (item) |it| {
+            // Check if it's not a separator
+            const sel_isSeparator = sel_registerName("isSeparatorItem");
+            const is_sep = msgSend(bool, it, sel_isSeparator, .{});
+            if (!is_sep) {
+                msgSend(void, it, sel_setTarget, .{delegate});
             }
         }
     }
-
-    _ = app;
 }
 
 // Objective-C runtime functions for class creation
@@ -442,7 +439,7 @@ fn trayQuitImp(self: id, _sel: SEL, sender: id) callconv(.c) void {
     _ = _sel;
     _ = sender;
 
-    g_should_exit = true;
+    g_signals.requestExit();
 
     // Post quit event to SDL
     var quit_event: SDLBackend.c.SDL_Event = undefined;

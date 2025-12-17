@@ -1,5 +1,6 @@
 const std = @import("std");
 const SDLBackend = @import("sdl-backend");
+const signals = @import("signals.zig");
 
 // Windows API structures
 const GUID = extern struct {
@@ -115,8 +116,7 @@ extern "kernel32" fn GetModuleHandleW(lpModuleName: ?[*:0]const u16) callconv(.{
 extern "kernel32" fn GetLastError() callconv(.{ .x86_64_win = .{} }) u32;
 
 // Global state
-var g_should_exit: bool = false;
-var g_should_show: bool = false;
+var g_signals: signals.TraySignals = .{};
 var g_app_hwnd: ?*anyopaque = null;
 
 pub const TrayIcon = struct {
@@ -162,8 +162,7 @@ pub const TrayIcon = struct {
 
         registerHotkey(msg_hwnd);
 
-        g_should_exit = false;
-        g_should_show = false;
+        g_signals.reset();
 
         return TrayIcon{ .nid = nid, .msg_hwnd = msg_hwnd };
     }
@@ -181,16 +180,12 @@ pub const TrayIcon = struct {
 
     pub fn pollEvents(self: *TrayIcon) bool {
         _ = self;
-        if (g_should_show) {
-            g_should_show = false;
-            return true;
-        }
-        return false;
+        return g_signals.takeShow();
     }
 
     pub fn shouldExit(self: *TrayIcon) bool {
         _ = self;
-        return g_should_exit;
+        return g_signals.shouldExit();
     }
 
     pub fn checkTrayMessages(self: *TrayIcon) void {
@@ -230,13 +225,21 @@ fn showContextMenu(hwnd: ?*anyopaque) void {
     _ = PostMessageW(hwnd, WM_NULL, 0, 0);
 
     if (cmd == ID_TRAY_SHOW) {
-        g_should_show = true;
-        showAppWindow();
+        requestShow();
     } else if (cmd == ID_TRAY_EXIT) {
-        g_should_exit = true;
-        if (g_app_hwnd) |app_hwnd| {
-            _ = PostMessageW(app_hwnd, WM_CLOSE, 0, 0);
-        }
+        requestExit();
+    }
+}
+
+fn requestShow() void {
+    g_signals.requestShow();
+    showAppWindow();
+}
+
+fn requestExit() void {
+    g_signals.requestExit();
+    if (g_app_hwnd) |app_hwnd| {
+        _ = PostMessageW(app_hwnd, WM_CLOSE, 0, 0);
     }
 }
 
@@ -248,15 +251,13 @@ fn trayWndProc(hwnd: ?*anyopaque, msg: u32, wParam: usize, lParam: isize) callco
             return 0;
         }
         if (event == WM_LBUTTONUP) {
-            g_should_show = true;
-            showAppWindow();
+            requestShow();
             return 0;
         }
     }
 
     if (msg == WM_HOTKEY and @as(i32, @intCast(wParam)) == HOTKEY_ID_SHOW) {
-        g_should_show = true;
-        showAppWindow();
+        requestShow();
         return 0;
     }
 
