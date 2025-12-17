@@ -6,39 +6,8 @@
 // - In details, press `k` to open the actions overlay and toggle items
 // ============================================
 
-export type ResultItem = {
-  id?: string;
-  title: string;
-  subtitle?: string;
-  icon?: string;
-};
-
-export type SubpanelItem = {
-  id?: string;
-  title: string;
-  subtitle: string;
-};
-
-export type ActionItem = {
-  name: string;
-  title: string;
-  text?: string;
-  close_on_execute?: boolean;
-};
-
-export type PanelTop = { type: 'header'; title: string; subtitle?: string } | { type: 'selected' };
-export type PanelBottom = { type: 'none' } | { type: 'info'; text: string };
-
-export type PanelNode =
-  | { type: 'flex'; items: SubpanelItem[] }
-  | { type: 'grid'; columns?: number; gap?: number; items: SubpanelItem[] }
-  | { type: 'box'; dir?: 'vertical' | 'horizontal'; gap?: number; children: PanelNode[] };
-
-export type SubpanelData = {
-  top: PanelTop;
-  main: PanelNode;
-  bottom?: PanelBottom;
-};
+import type { ActionItem, ResultItem } from '@wnk/sdk';
+import { Box, Flex, Item, Panel } from '@wnk/sdk';
 
 type Todo = { id: number; text: string; done: boolean };
 
@@ -78,26 +47,37 @@ function toggleById(raw: string): void {
   todo.done = !todo.done;
 }
 
-function renderSubpanel(): SubpanelData {
+function TodoPanel(): JSX.Element {
   const done = todos.filter((t) => t.done).length;
   const pending = todos.length - done;
 
-  const items: SubpanelItem[] = todos.map((t) => ({
-    id: String(t.id),
+  const actions: ActionItem[] = todos.map((t) => ({
+    name: 'todo.toggle',
     title: `${t.done ? CHECK_DONE : CHECK_EMPTY} ${t.text}`,
-    subtitle: '',
+    text: String(t.id),
+    close_on_execute: false,
   }));
 
-  return {
-    top: { type: 'header', title: 'Todo', subtitle: `${pending} pending \u00b7 ${done} done (session only)` },
-    main: {
-      type: 'box',
-      dir: 'vertical',
-      gap: 12,
-      children: [{ type: 'flex', items }],
-    },
-    bottom: { type: 'info', text: 'W/S: move  Enter: open/actions  k: actions  Esc: back  |  Add: type "todo <text>"' },
-  };
+  return (
+    <Panel
+      top={{ type: 'header', title: 'Todo', subtitle: `${pending} pending \u00b7 ${done} done (session only)` }}
+      bottom={{ type: 'info', text: 'W/S: move  Enter: open/actions  k: actions  Esc: back  |  Add: type "todo <text>"' }}
+      actions={actions}
+    >
+      <Box dir="vertical" gap={12}>
+        <Flex>
+          {todos.map((t) => (
+            <Item
+              key={t.id}
+              id={String(t.id)}
+              title={`${t.done ? CHECK_DONE : CHECK_EMPTY} ${t.text}`}
+              subtitle=""
+            />
+          ))}
+        </Flex>
+      </Box>
+    </Panel>
+  );
 }
 
 export function getResults(query: string): ResultItem[] {
@@ -124,43 +104,23 @@ export function getResults(query: string): ResultItem[] {
   return list;
 }
 
-export async function getSubpanel(itemId: string): Promise<SubpanelData | null> {
+export function getSubpanel(itemId: string): JSX.Element | null {
   if (itemId.startsWith(ADD_PREFIX)) {
     addTodo(itemId.slice(ADD_PREFIX.length));
-    return renderSubpanel();
+    return <TodoPanel />;
   }
 
-  if (itemId === 'list') return renderSubpanel();
+  if (itemId === 'list') return <TodoPanel />;
   return null;
 }
 
-export function getActions(ctx: {
-  panel: 'search' | 'details';
-  pluginId: string;
-  itemId: string;
-  selectedId?: string;
-  selectedText?: string;
-  query?: string;
-}): ActionItem[] {
-  if (ctx.panel !== 'details') return [];
-  if (ctx.itemId !== 'list') return [];
-
-  return todos.map((t) => ({
-    name: 'todo.toggle',
-    title: `${t.done ? CHECK_DONE : CHECK_EMPTY} ${t.text}`,
-    text: String(t.id),
-    close_on_execute: false,
-  }));
-}
-
-export function onCommand(name: string, text: string): SubpanelData | null {
+export function onCommand(name: string, text: string): JSX.Element | null {
   if (name === 'toggle') {
     toggleById(text ?? '');
-    return renderSubpanel();
+    return <TodoPanel />;
   }
   return null;
 }
 
-export default function TodoPlugin(): null {
-  return null;
-}
+export default TodoPanel;
+

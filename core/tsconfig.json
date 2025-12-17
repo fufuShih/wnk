@@ -14,7 +14,7 @@
     "rootDir": ".",
     "baseUrl": ".",
     "paths": {
-      "@wnk/sdk": ["./wnk-sdk/index.ts"]
+      "@wnk/sdk": ["./sdk/index.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

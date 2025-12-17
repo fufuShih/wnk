@@ -1,5 +1,9 @@
 import { handleHostEvent, type HostEvent } from './lib';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { isValidElement, type ReactNode } from 'react';
+import type { ActionItem, ResultItem as PluginResultItem, SubpanelData } from './sdk/ipc';
+import { renderOnce } from './lib/render-once';
+import { subpanelFromSerializedRoot } from './lib/subpanel';
 
 declare const process: any;
 
@@ -10,26 +14,11 @@ type PluginManifest = {
   entry?: string;
 };
 
-type PluginResultItem = { id?: string; title: string; subtitle?: string; icon?: string };
 type ResultItem = { pluginId: string; id?: string; title: string; subtitle?: string; icon?: string };
-
-type SubpanelItem = { id?: string; title: string; subtitle: string };
-
-type ActionItem = { name: string; title: string; text?: string; close_on_execute?: boolean };
-
-type PanelTop = { type: 'header'; title: string; subtitle?: string } | { type: 'selected' };
-type PanelBottom = { type: 'none' } | { type: 'info'; text: string };
-
-type PanelNode =
-  | { type: 'flex'; items: SubpanelItem[] }
-  | { type: 'grid'; columns?: number; gap?: number; items: SubpanelItem[] }
-  | { type: 'box'; dir?: 'vertical' | 'horizontal'; gap?: number; children: PanelNode[] };
-
-type SubpanelData = { top: PanelTop; main: PanelNode; bottom?: PanelBottom };
 
 type PluginModule = {
   getResults: (query: string) => PluginResultItem[] | Promise<PluginResultItem[]>;
-  getSubpanel?: (itemId: string) => SubpanelData | null | Promise<SubpanelData | null>;
+  getSubpanel?: (itemId: string) => SubpanelData | ReactNode | null | Promise<SubpanelData | ReactNode | null>;
   getActions?: (ctx: {
     panel: 'search' | 'details';
     pluginId: string;
@@ -38,13 +27,17 @@ type PluginModule = {
     selectedText?: string;
     query?: string;
   }) => ActionItem[] | Promise<ActionItem[]>;
-  onCommand?: (name: string, text: string) => SubpanelData | null | void | Promise<SubpanelData | null | void>;
+  onCommand?: (name: string, text: string) => SubpanelData | ReactNode | null | void | Promise<SubpanelData | ReactNode | null | void>;
 };
 
 type LoadedPlugin = { manifest: PluginManifest; mod: PluginModule };
 
 function writeJson(obj: object): void {
   console.log(JSON.stringify(obj));
+}
+
+function isSubpanelData(value: unknown): value is SubpanelData {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && 'top' in value && 'main' in value;
 }
 
 async function loadPlugins(): Promise<LoadedPlugin[]> {
@@ -96,6 +89,8 @@ const plugins: LoadedPlugin[] = await loadPlugins();
 
 let latestQueryToken = 0;
 let latestSubpanelToken = 0;
+const lastDetailsItemByPlugin = new Map<string, string>();
+const actionsCache = new Map<string, ActionItem[]>();
 
 let stdinBuffer = '';
 const stdinQueue: string[] = [];
@@ -150,6 +145,7 @@ async function drainStdinQueue(): Promise<void> {
         const token = ++latestSubpanelToken;
         const pluginId = msg.pluginId ?? '';
         const itemId = msg.itemId ?? '';
+        if (pluginId && itemId) lastDetailsItemByPlugin.set(pluginId, itemId);
 
         const plugin = plugins.find((p) => p.manifest.id === pluginId);
         if (!plugin || typeof plugin.mod.getSubpanel !== 'function') {
@@ -168,9 +164,20 @@ async function drainStdinQueue(): Promise<void> {
             const subpanel = await plugin.mod.getSubpanel?.(itemId);
             if (token !== latestSubpanelToken) return;
 
-            if (subpanel) {
+            if (subpanel && isValidElement(subpanel)) {
+              const payload = await renderOnce(subpanel);
+              if (token !== latestSubpanelToken) return;
+
+              const rendered = subpanelFromSerializedRoot(payload.root, { title: itemId });
+              if (rendered.actions) actionsCache.set(`${pluginId}:${itemId}`, rendered.actions);
+              else actionsCache.delete(`${pluginId}:${itemId}`);
+
+              writeJson({ type: 'subpanel', pluginId, ...rendered.subpanel });
+            } else if (isSubpanelData(subpanel)) {
+              actionsCache.delete(`${pluginId}:${itemId}`);
               writeJson({ type: 'subpanel', pluginId, ...subpanel });
             } else {
+              actionsCache.delete(`${pluginId}:${itemId}`);
               writeJson({
                 type: 'subpanel',
                 pluginId,
@@ -202,7 +209,22 @@ async function drainStdinQueue(): Promise<void> {
         void (async () => {
           try {
             const subpanel = await plugin.mod.onCommand?.(commandName, text);
-            if (subpanel) writeJson({ type: 'subpanel', pluginId, ...subpanel });
+            if (!subpanel) return;
+
+            if (subpanel && isValidElement(subpanel)) {
+              const payload = await renderOnce(subpanel);
+              const rendered = subpanelFromSerializedRoot(payload.root, { title: pluginId });
+              const itemId = lastDetailsItemByPlugin.get(pluginId);
+              if (itemId) {
+                if (rendered.actions) actionsCache.set(`${pluginId}:${itemId}`, rendered.actions);
+                else actionsCache.delete(`${pluginId}:${itemId}`);
+              }
+              writeJson({ type: 'subpanel', pluginId, ...rendered.subpanel });
+            } else if (isSubpanelData(subpanel)) {
+              const itemId = lastDetailsItemByPlugin.get(pluginId);
+              if (itemId) actionsCache.delete(`${pluginId}:${itemId}`);
+              writeJson({ type: 'subpanel', pluginId, ...subpanel });
+            }
           } catch {}
         })();
       } else if (msg.type === 'getActions') {
@@ -215,22 +237,44 @@ async function drainStdinQueue(): Promise<void> {
         const query = msg.query ?? '';
 
         const plugin = plugins.find((p) => p.manifest.id === pluginId);
-        if (!plugin || typeof plugin.mod.getActions !== 'function') {
+        if (!plugin) {
           writeJson({ type: 'actions', token, pluginId, items: [] });
           continue;
         }
 
         void (async () => {
           try {
-            const items = await plugin.mod.getActions?.({
-              panel,
-              pluginId,
-              itemId,
-              selectedId: selectedId || undefined,
-              selectedText: selectedText || undefined,
-              query: query || undefined,
-            });
-            writeJson({ type: 'actions', token, pluginId, items: items ?? [] });
+            if (typeof plugin.mod.getActions === 'function') {
+              const items = await plugin.mod.getActions?.({
+                panel,
+                pluginId,
+                itemId,
+                selectedId: selectedId || undefined,
+                selectedText: selectedText || undefined,
+                query: query || undefined,
+              });
+              writeJson({ type: 'actions', token, pluginId, items: items ?? [] });
+              return;
+            }
+
+            const cached = actionsCache.get(`${pluginId}:${itemId}`);
+            if (cached) {
+              writeJson({ type: 'actions', token, pluginId, items: cached });
+              return;
+            }
+
+            if (panel === 'details' && typeof plugin.mod.getSubpanel === 'function') {
+              const maybePanel = await plugin.mod.getSubpanel(itemId);
+              if (maybePanel && isValidElement(maybePanel)) {
+                const payload = await renderOnce(maybePanel);
+                const rendered = subpanelFromSerializedRoot(payload.root, { title: itemId });
+                if (rendered.actions) actionsCache.set(`${pluginId}:${itemId}`, rendered.actions);
+                writeJson({ type: 'actions', token, pluginId, items: rendered.actions ?? [] });
+                return;
+              }
+            }
+
+            writeJson({ type: 'actions', token, pluginId, items: [] });
           } catch {}
         })();
       } else {

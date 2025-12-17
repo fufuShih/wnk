@@ -34,7 +34,9 @@ export interface Style {
 export interface BaseProps {
   key?: string | number;
   style?: Style;
+  styles?: Style;
   children?: React.ReactNode;
+  [key: string]: unknown;
 }
 
 export interface BoxProps extends BaseProps { onPress?: () => void; }
