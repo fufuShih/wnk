@@ -27,4 +27,4 @@ Bun -> Host
 
 ## Notes
 - The Bun runtime imports built plugin bundles from `core/plugins/*/dist/`; update TS sources then run `bun run build:plugins`.
-- The Zig host currently uses Windows non-blocking pipe reads (`PeekNamedPipe`), so behavior is most tested on Windows.
+- The Zig host uses platform-specific non-blocking pipe reads (`PeekNamedPipe` on Windows, `poll` on POSIX).

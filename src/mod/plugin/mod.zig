@@ -5,16 +5,15 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const windows = std.os.windows;
+pub const IpcError = error{
+    ReadFailed,
+    WriteFailed,
+};
 
-extern "kernel32" fn PeekNamedPipe(
-    hNamedPipe: windows.HANDLE,
-    lpBuffer: ?*anyopaque,
-    nBufferSize: u32,
-    lpBytesRead: ?*u32,
-    lpTotalBytesAvail: ?*u32,
-    lpBytesLeftThisMessage: ?*u32,
-) callconv(.winapi) windows.BOOL;
+const platform = switch (builtin.os.tag) {
+    .windows => @import("windows.zig"),
+    else => @import("posix.zig"),
+};
 
 pub const BunProcess = struct {
     process: std.process.Child,
@@ -27,7 +26,6 @@ pub const BunProcess = struct {
     // Accumulates stdout bytes across frames so pollLine can be non-blocking.
     pending_buffer: std.ArrayListUnmanaged(u8),
 
-    // Spawn a new BunProcess
     pub fn spawn(allocator: std.mem.Allocator) !BunProcess {
         const argv = [_][]const u8{ "bun", "run", "core/runtime.tsx" };
 
@@ -54,35 +52,11 @@ pub const BunProcess = struct {
         };
     }
 
-    fn windowsBytesAvailable(self: *BunProcess) !u32 {
-        var available: u32 = 0;
-        const ok = PeekNamedPipe(self.stdout_file.handle, null, 0, null, &available, null);
-        if (ok == 0) return IpcError.ReadFailed;
-        return available;
-    }
-
     fn readAvailableIntoPending(self: *BunProcess) !void {
-        if (builtin.os.tag != .windows) return;
-
-        var available = try self.windowsBytesAvailable();
-        var tmp: [4096]u8 = undefined;
-
-        while (available > 0) {
-            const to_read: usize = @min(tmp.len, available);
-            const n = self.stdout_file.read(tmp[0..to_read]) catch |err| {
-                if (err == error.EndOfStream) return;
-                return IpcError.ReadFailed;
-            };
-            if (n == 0) return;
-
-            try self.pending_buffer.appendSlice(self.allocator, tmp[0..n]);
-            available -= @intCast(n);
-
-            if (available == 0) {
-                // More may have arrived while we were reading.
-                available = try self.windowsBytesAvailable();
-            }
-        }
+        platform.readAvailableIntoPending(self) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => return IpcError.ReadFailed,
+        };
     }
 
     fn popLineFromPending(self: *BunProcess) !?[]const u8 {
@@ -109,7 +83,7 @@ pub const BunProcess = struct {
         return self.read_buffer.items;
     }
 
-    /// Poll a single complete line from Bun stdout without blocking (Windows).
+    /// Poll a single complete line from Bun stdout without blocking.
     pub fn pollLine(self: *BunProcess) !?[]const u8 {
         try self.readAvailableIntoPending();
         return try self.popLineFromPending();
@@ -178,7 +152,3 @@ pub const BunProcess = struct {
     }
 };
 
-pub const IpcError = error{
-    ReadFailed,
-    WriteFailed,
-};
