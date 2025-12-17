@@ -6,7 +6,6 @@ const ipc = @import("ipc.zig");
 pub const Panel = enum {
     search,
     details,
-    commands,
 };
 
 pub const DetailsSource = enum {
@@ -23,7 +22,6 @@ pub const DetailsPanel = struct {
 pub const PanelEntry = union(Panel) {
     search: void,
     details: DetailsPanel,
-    commands: void,
 };
 
 pub const default_panel_entry: PanelEntry = .{ .search = {} };
@@ -73,10 +71,6 @@ pub const Navigation = struct {
 
     pub fn openMockDetails(self: *Navigation, panel: *const mock.PanelData) void {
         self.pushPanel(.{ .details = .{ .source = .mock, .mock_panel = panel, .selected_index = 0 } });
-    }
-
-    pub fn openCommands(self: *Navigation) void {
-        self.pushPanel(.{ .commands = {} });
     }
 
     pub fn detailsItemsCount(self: *Navigation) usize {

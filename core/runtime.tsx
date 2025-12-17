@@ -19,7 +19,7 @@ type PanelTop = { type: 'header'; title: string; subtitle?: string } | { type: '
 type PanelBottom = { type: 'none' } | { type: 'info'; text: string };
 
 type PanelNode =
-  | { type: 'list'; items: SubpanelItem[] }
+  | { type: 'flex'; items: SubpanelItem[] }
   | { type: 'grid'; columns?: number; gap?: number; items: SubpanelItem[] }
   | { type: 'box'; dir?: 'vertical' | 'horizontal'; gap?: number; children: PanelNode[] };
 
@@ -136,7 +136,7 @@ async function drainStdinQueue(): Promise<void> {
             type: 'subpanel',
             pluginId,
             top: { type: 'header', title: itemId },
-            main: { type: 'list', items: [] },
+            main: { type: 'flex', items: [] },
             bottom: { type: 'none' },
           });
           continue;
@@ -154,7 +154,7 @@ async function drainStdinQueue(): Promise<void> {
                 type: 'subpanel',
                 pluginId,
                 top: { type: 'header', title: itemId },
-                main: { type: 'list', items: [] },
+                main: { type: 'flex', items: [] },
                 bottom: { type: 'none' },
               });
             }

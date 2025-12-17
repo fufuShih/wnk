@@ -19,15 +19,18 @@ src/
     state/           - Global state + IPC payload parsing
     tray/            - System tray integration
   ui/
-    search.zig       - Search input + results list
+    panels/          - Panel renderers (top/main/bottom in one file each)
+      mod.zig        - Panel dispatcher (renderTop/renderMain/renderBottom)
+      search.zig     - Search panel (top/main/bottom)
+      details.zig    - Details panel (top/main/bottom)
+    overlays/        - Floating UI (not a panel region)
+      action_overlay.zig
+    regions.zig      - Region-scoped UI primitives (top/main/bottom)
+    style.zig        - Shared UI styling constants
+    search.zig       - Search query + selection helpers
     keyboard.zig     - Input handling & navigation
-    panel/
-      top.zig        - Panel top header rendering
-      main.zig       - Panel main content rendering + overlay
-      bottom.zig     - Panel bottom hint bar
-    floating_action_panel.zig
-    commands.zig     - Command definitions and UI
-    components.zig   - Shared UI helpers
+    actions.zig      - Action overlay context helpers (hasCommand/canOpenOverlay)
+    commands.zig     - Command definitions (sent to Bun)
 ```
 
 ## IPC
@@ -36,4 +39,5 @@ src/
 
 ## UI Conventions
 - Keep rendering state-driven (avoid hidden global UI state).
-- Put context in the header area; keep panels focused on content/actions.
+- Split each panel into top/main/bottom regions and keep region APIs separated (`ui/regions.zig`).
+- The action overlay is not a panel/region: it only opens when main content is focused and the current selection provides actions.

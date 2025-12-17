@@ -59,18 +59,19 @@ pub const PanelTopPayload = struct {
 };
 
 pub const PanelNodePayload = struct {
-    /// "list", "grid", or "box"
-    type: []const u8 = "list",
+    /// "flex", "grid", or "box"
+    type: []const u8 = "flex",
 
     /// Used when `type == "grid"`.
     columns: ?usize = null,
+    /// Grid cell gap, or child spacing when `type == "box"`.
     gap: ?usize = null,
 
     /// Used when `type == "box"`.
     dir: ?[]const u8 = null,
     children: []PanelNodePayload = &.{},
 
-    /// Used when `type == "list"` or `type == "grid"`.
+    /// Used when `type == "flex"` or `type == "grid"`.
     items: []SubpanelItem = &.{},
 };
 
@@ -135,7 +136,34 @@ pub fn subpanelItemsCount(node: PanelNodePayload) usize {
         for (node.children) |c| total += subpanelItemsCount(c);
         return total;
     }
-    return node.items.len;
+
+    if (std.mem.eql(u8, node.type, "flex") or std.mem.eql(u8, node.type, "grid")) {
+        return node.items.len;
+    }
+
+    // Unsupported node kinds are treated as empty to avoid selection mismatch.
+    return 0;
+}
+
+/// Returns the item at a given flat index within a PanelNode tree.
+/// This mirrors `subpanelItemsCount()` by traversing `box` children in order.
+pub fn subpanelItemAtIndex(node: PanelNodePayload, flat_index: usize) ?SubpanelItem {
+    if (std.mem.eql(u8, node.type, "box")) {
+        var cursor = flat_index;
+        for (node.children) |c| {
+            const count = subpanelItemsCount(c);
+            if (cursor < count) return subpanelItemAtIndex(c, cursor);
+            cursor -= count;
+        }
+        return null;
+    }
+
+    if (!(std.mem.eql(u8, node.type, "flex") or std.mem.eql(u8, node.type, "grid"))) {
+        return null;
+    }
+
+    if (flat_index >= node.items.len) return null;
+    return node.items[flat_index];
 }
 
 pub fn updateSubpanelData(allocator: std.mem.Allocator, json_str: []const u8) !void {

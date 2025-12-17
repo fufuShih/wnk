@@ -9,10 +9,9 @@ const tray = @import("tray");
 
 const keyboard = @import("ui/keyboard.zig");
 const search = @import("ui/search.zig");
-const panel_top = @import("ui/panel/top.zig");
-const panel_main = @import("ui/panel/main.zig");
-const panel_bottom = @import("ui/panel/bottom.zig");
-const commands = @import("ui/commands.zig");
+const actions = @import("ui/actions.zig");
+const panels = @import("ui/panels/mod.zig");
+const style = @import("ui/style.zig");
 
 var last_query_hash: u64 = 0;
 var last_query_change_ms: i64 = 0;
@@ -156,44 +155,25 @@ fn handleKeyboardFrame() !?dvui.App.Result {
 fn renderTopArea() !void {
     _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 20 } });
 
-    try panel_top.renderPanelTop(currentPanel());
-}
-
-fn textForCommand(sel: ?search.SelectedItem) []const u8 {
-    if (sel) |s| switch (s) {
-        .plugin => |item| {
-            if (item.id) |id| {
-                const prefix = "file:";
-                if (std.mem.startsWith(u8, id, prefix)) {
-                    return id[prefix.len..];
-                }
-            }
-            return item.title;
-        },
-        .mock => |item| return item.title,
-    };
-    return state.getSelectedItemTitle();
+    try panels.renderTop(currentPanel());
 }
 
 fn handleCommandExecutionFrame() void {
     if (!state.command_execute) return;
     state.command_execute = false;
 
-    // When operating from details/commands panels, rely on stored selected item info.
-    const base_sel: ?search.SelectedItem = if (state.currentPanel() == .search) search.getSelectedItem() else null;
-
-    const cmd = commands.getCommand(state.command_selected_index);
-    if (cmd != null) {
-        const text_for_command = textForCommand(base_sel);
+    const cmd = actions.commandAt(state.command_selected_index);
+    if (cmd) |command| {
+        const text_for_command = actions.commandText();
 
         // Route action via Bun (command -> effect -> host state update).
         if (bun_process) |*proc| {
-            proc.sendCommand(cmd.?.name, text_for_command) catch |err| {
+            proc.sendCommand(command.name, text_for_command) catch |err| {
                 std.debug.print("Failed to send command: {}\n", .{err});
             };
         } else {
             // Fallback if Bun isn't running.
-            if (std.mem.eql(u8, cmd.?.name, "setSearchText")) {
+            if (std.mem.eql(u8, command.name, "setSearchText")) {
                 state.setSearchText(text_for_command);
                 state.focus_on_results = false;
                 state.resetPanels();
@@ -201,11 +181,9 @@ fn handleCommandExecutionFrame() void {
         }
     }
 
-    // Close UI after execution.
+    // Close overlay after execution.
     if (state.nav.action_open) {
         state.nav.action_open = false;
-    } else if (state.currentPanel() == .commands) {
-        state.popPanel();
     }
     dvui.focusWidget(null, null, null);
 }
@@ -232,7 +210,7 @@ fn sendQueryIfChangedFrame() void {
     }
 }
 
-fn enterListModeFrame() void {
+fn enterDetailsPanelFrame() void {
     // Clear old subpanel data
     if (state.ipc.subpanel_data) |*s| {
         s.deinit();
@@ -262,7 +240,7 @@ fn enterListModeFrame() void {
     };
 }
 
-fn leaveListModeFrame() void {
+fn leaveDetailsPanelFrame() void {
     if (state.ipc.subpanel_data) |*s| {
         s.deinit();
         state.ipc.subpanel_data = null;
@@ -273,10 +251,10 @@ fn leaveListModeFrame() void {
 fn handleDetailsPanelTransitionsFrame() void {
     const now = state.currentPanel();
     if (now == .details and last_panel != .details) {
-        enterListModeFrame();
+        enterDetailsPanelFrame();
     }
     if (now != .details and last_panel == .details) {
-        leaveListModeFrame();
+        leaveDetailsPanelFrame();
     }
     last_panel = now;
 }
@@ -305,10 +283,10 @@ fn renderPanelsArea() !void {
     var over = dvui.overlay(@src(), .{ .expand = .both });
     defer over.deinit();
 
-    try panel_main.renderPanelBody(state.currentPanel());
+    try panels.renderMain(state.currentPanel());
 
-    panel_bottom.renderPanelBottom(state.currentPanel());
-    try panel_main.renderFloatingAction(search.getSelectedItem());
+    panels.renderBottom(state.currentPanel());
+    try panels.renderOverlays();
 }
 
 // Executed every frame to draw UI
@@ -320,7 +298,7 @@ pub fn AppFrame() !dvui.App.Result {
     var main_box = dvui.box(@src(), .{ .dir = .vertical }, .{
         .expand = .both,
         .background = true,
-        .color_fill = .{ .r = 0x1e, .g = 0x1e, .b = 0x2e },
+        .color_fill = style.colors.app_background,
     });
     defer main_box.deinit();
 

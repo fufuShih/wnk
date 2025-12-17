@@ -13,8 +13,8 @@ pub const PanelBottom = union(enum) {
 };
 
 pub const PanelLayout = struct {
-    /// "list" (default) or "grid"
-    mode: []const u8 = "list",
+    /// "flex" (default) or "grid"
+    mode: []const u8 = "flex",
     columns: ?usize = null,
     gap: ?usize = null,
 };
@@ -73,7 +73,7 @@ pub const SearchResult = struct {
 const code_settings_panel = PanelData{
     .top = .{ .header = .{ .title = "Code / Settings", .subtitle = "Common toggles" } },
     .main = .{ .list = .{
-        .layout = .{ .mode = "list" },
+        .layout = .{ .mode = "flex" },
         .items = &.{
             .{ .title = "Toggle Vim Mode", .subtitle = "Editor" },
             .{ .title = "Change Theme", .subtitle = "Appearance" },
@@ -100,7 +100,7 @@ const code_recent_panel = PanelData{
 const code_root_panel = PanelData{
     .top = .{ .header = .{ .title = "Code", .subtitle = "Development" } },
     .main = .{ .list = .{
-        .layout = .{ .mode = "list" },
+        .layout = .{ .mode = "flex" },
         .items = &.{
             .{ .title = "Recent", .subtitle = "Projects", .next_panel = &code_recent_panel },
             .{ .title = "Settings", .subtitle = "Preferences", .next_panel = &code_settings_panel },
@@ -112,7 +112,7 @@ const code_root_panel = PanelData{
 const calendar_root_panel = PanelData{
     .top = .{ .header = .{ .title = "Calendar", .subtitle = "System Preferences" } },
     .main = .{ .list = .{
-        .layout = .{ .mode = "list" },
+        .layout = .{ .mode = "flex" },
         .items = &.{
             .{ .title = "Today", .subtitle = "Overview" },
             .{ .title = "Upcoming", .subtitle = "Next 7 days" },
@@ -126,6 +126,3 @@ pub const example_results = [_]SearchResult{
     .{ .title = "Calendar", .subtitle = "System Preferences", .icon = "C", .next_panel = &calendar_root_panel },
     .{ .title = "Code", .subtitle = "Development", .icon = "#", .next_panel = &code_root_panel },
 };
-
-/// Back-compat alias (will be removed later).
-pub const mock_results = example_results;

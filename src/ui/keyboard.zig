@@ -1,6 +1,7 @@
 const dvui = @import("dvui");
 const state = @import("state");
 const search = @import("search.zig");
+const actions = @import("actions.zig");
 
 pub const KeyboardResult = enum {
     ok,
@@ -82,36 +83,26 @@ pub fn handleEvents() !KeyboardResult {
                                 state.setSelectedItemInfo(h.title, h.subtitle orelse "");
                                 state.openMockDetails(next_panel);
                             } else {
-                                state.openCommands();
+                                // If the item isn't navigable, fall back to actions (if available).
+                                actions.openOverlay();
                             }
                             state.command_selected_index = 0;
                             dvui.focusWidget(null, null, null);
-                            e.handled = true;
-                        },
-                        .commands => {
-                            state.command_execute = true;
                             e.handled = true;
                         },
                     }
                 }
             }
 
-            // 'k' opens the floating action overlay.
-            if (code == .k and !state.nav.action_open) {
-                if (state.currentPanel() == .search and state.focus_on_results) {
-                    state.nav.action_open = true;
-                    state.command_selected_index = 0;
-                    e.handled = true;
-                } else if (state.currentPanel() == .details or state.currentPanel() == .commands) {
-                    state.nav.action_open = true;
-                    state.command_selected_index = 0;
-                    e.handled = true;
-                }
+            // 'k' opens the floating action overlay when the main selection provides actions.
+            if (code == .k and actions.canOpenOverlay()) {
+                actions.openOverlay();
+                e.handled = true;
             }
 
             // W/S keys for navigation
             if (code == .w or code == .s) {
-                if (state.nav.action_open or state.currentPanel() == .commands) {
+                if (state.nav.action_open) {
                     if (code == .w) {
                         if (state.command_selected_index > 0) state.command_selected_index -= 1;
                     } else {

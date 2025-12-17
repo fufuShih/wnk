@@ -109,7 +109,7 @@ export type PanelTop = { type: 'header'; title: string; subtitle?: string } | { 
 export type PanelBottom = { type: 'none' } | { type: 'info'; text: string };
 
 export type PanelNode =
-  | { type: 'list'; items: SubpanelItem[] }
+  | { type: 'flex'; items: SubpanelItem[] }
   | { type: 'grid'; columns?: number; gap?: number; items: SubpanelItem[] }
   | { type: 'box'; dir?: 'vertical' | 'horizontal'; gap?: number; children: PanelNode[] };
 
@@ -127,13 +127,13 @@ export async function getSubpanel(itemId: string): Promise<SubpanelData | null> 
   if (!cachedWeather || !cachedForecast) {
     return {
       top: { type: 'header', title: 'Weather', subtitle: 'Unable to load weather data' },
-      main: { type: 'list', items: [] },
+      main: { type: 'flex', items: [] },
       bottom: { type: 'info', text: 'Status: offline' },
     };
   }
 
   const summary: PanelNode = {
-    type: 'list',
+    type: 'flex',
     items: [{ title: `${cachedWeather.city}  ${cachedWeather.temp}°C`, subtitle: cachedWeather.description }],
   };
 
@@ -157,4 +157,3 @@ export async function getSubpanel(itemId: string): Promise<SubpanelData | null> 
 export default function WeatherPlugin(): null {
   return null;
 }
-

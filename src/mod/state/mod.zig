@@ -14,7 +14,6 @@ pub const default_panel = nav_mod.default_panel;
 pub const PluginResultItem = ipc.PluginResultItem;
 pub const PluginResultsPayload = ipc.PluginResultsPayload;
 pub const SubpanelItem = ipc.SubpanelItem;
-pub const SubpanelLayout = ipc.SubpanelLayout;
 pub const SubpanelPayload = ipc.SubpanelPayload;
 
 // Search buffer for the input field
@@ -56,10 +55,6 @@ pub fn openMockDetails(panel: *const mock.PanelData) void {
     nav.openMockDetails(panel);
 }
 
-pub fn openCommands() void {
-    nav.openCommands();
-}
-
 pub fn detailsItemsCount() usize {
     return nav.detailsItemsCount();
 }
@@ -76,7 +71,7 @@ pub fn detailsSelectedNextPanel() ?*const mock.PanelData {
     return nav.detailsSelectedNextPanel();
 }
 
-// Command panel selection/trigger
+// Action overlay selection/trigger
 pub var command_selected_index: usize = 0;
 pub var command_execute = false;
 
@@ -85,7 +80,7 @@ pub var selected_index: usize = 0;
 pub var focus_on_results = false;
 
 // Plugin-provided results (via IPC)
-// Store selected item info when entering list mode (to avoid dangling pointers)
+// Store selected item info when entering details mode (to avoid dangling pointers)
 pub var selected_item_title: [256]u8 = undefined;
 pub var selected_item_title_len: usize = 0;
 pub var selected_item_subtitle: [256]u8 = undefined;
@@ -117,7 +112,6 @@ pub const MockPanelMain = mock.PanelMain;
 pub const MockPanelTop = mock.PanelTop;
 pub const MockPanelBottom = mock.PanelBottom;
 pub const example_results = mock.example_results;
-pub const mock_results = mock.mock_results;
 
 pub fn panelHeader(p: *const mock.PanelData) mock.PanelTop.Header {
     return mock.panelHeader(p);
