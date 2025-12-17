@@ -148,7 +148,6 @@ pub const main = struct {
     fn renderMockItemsList(items: []const state.MockPanelItem, selected_index: usize) !void {
         var scroll = dvui.scrollArea(@src(), .{}, .{
             .expand = .both,
-            .margin = style.layout.content_margin,
         });
         defer scroll.deinit();
 
@@ -162,7 +161,6 @@ pub const main = struct {
     fn renderMockItemsGrid(items: []const state.MockPanelItem, selected_index: usize, columns: usize, gap: usize) !void {
         var scroll = dvui.scrollArea(@src(), .{}, .{
             .expand = .both,
-            .margin = style.layout.content_margin,
         });
         defer scroll.deinit();
 
@@ -203,7 +201,6 @@ pub const main = struct {
 
         var scroll = dvui.scrollArea(@src(), .{}, .{
             .expand = .both,
-            .margin = style.layout.content_margin,
         });
         defer scroll.deinit();
 

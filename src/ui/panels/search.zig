@@ -55,7 +55,6 @@ pub const main = struct {
 
         var scroll = dvui.scrollArea(@src(), .{}, .{
             .expand = .both,
-            .margin = style.layout.content_margin,
         });
         defer scroll.deinit();
 

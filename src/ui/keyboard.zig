@@ -12,6 +12,12 @@ pub const KeyboardResult = enum {
 pub fn handleEvents() !KeyboardResult {
     const evt = dvui.events();
     for (evt) |*e| {
+        // This UI is keyboard-driven: ignore all mouse interactions.
+        if (e.evt == .mouse) {
+            e.handled = true;
+            continue;
+        }
+
         if (e.evt == .key and e.evt.key.action == .down) {
             const code = e.evt.key.code;
 
@@ -26,7 +32,8 @@ pub fn handleEvents() !KeyboardResult {
                     e.handled = true;
                 } else if (state.canPopPanel()) {
                     state.popPanel();
-                    state.focus_on_results = true;
+                    // Returning to the root/search panel should start in the search input.
+                    state.focus_on_results = false;
                     dvui.focusWidget(null, null, null);
                     e.handled = true;
                 } else {

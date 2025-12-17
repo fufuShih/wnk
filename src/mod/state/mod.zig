@@ -176,12 +176,9 @@ pub fn handleBunMessage(allocator: std.mem.Allocator, json_str: []const u8) void
 
     if (std.mem.eql(u8, type_val.string, "results")) {
         ipc.updatePluginResults(allocator, json_str) catch {};
-        if (ipc.plugin_results) |p| {
-            if (p.value.items.len > 0) {
-                focus_on_results = true;
-                selected_index = 0;
-            }
-        }
+        // Keep focus keyboard-driven: results updates should not steal focus from the search input.
+        // Reset selection so the first result is ready when the user switches focus to main.
+        if (!focus_on_results) selected_index = 0;
         return;
     }
 
