@@ -164,7 +164,9 @@ fn handleCommandExecutionFrame() void {
 
     const cmd = actions.commandAt(state.command_selected_index);
     if (cmd) |command| {
-        const text_for_command = actions.commandText();
+        if (command.name.len == 0) return;
+
+        const text_for_command = actions.commandPayload(command);
 
         // Route action via Bun (command -> effect -> host state update).
         if (bun_process) |*proc| {
@@ -182,10 +184,37 @@ fn handleCommandExecutionFrame() void {
     }
 
     // Close overlay after execution.
-    if (state.nav.action_open) {
+    if (cmd != null and cmd.?.close_on_execute and state.nav.action_open) {
         state.nav.action_open = false;
+        state.ipc.clearActionsData();
+        dvui.focusWidget(null, null, null);
     }
-    dvui.focusWidget(null, null, null);
+}
+
+fn sendActionsIfQueuedFrame() void {
+    // Clear any cached actions when the overlay is closed.
+    if (!state.nav.action_open) {
+        if (state.ipc.actions_data != null or state.ipc.actions_pending or state.ipc.actions_request_queued) {
+            state.ipc.clearActionsData();
+        }
+        return;
+    }
+
+    // Only send one request at a time.
+    if (state.ipc.actions_pending) return;
+    if (!state.ipc.actions_request_queued) return;
+    state.ipc.actions_request_queued = false;
+
+    // Remote actions require a running Bun process and a plugin-owned selection context.
+    const ctx = actions.bunActionsContextOrNull() orelse return;
+    if (bun_process) |*proc| {
+        const token = state.ipc.nextActionsToken();
+        state.ipc.actions_pending = true;
+        proc.sendGetActions(token, ctx.panel, ctx.plugin_id, ctx.item_id, ctx.selected_id, ctx.selected_text, ctx.query) catch |err| {
+            std.debug.print("Failed to request actions: {}\n", .{err});
+            state.ipc.actions_pending = false;
+        };
+    }
 }
 
 fn sendQueryIfChangedFrame() void {
@@ -217,6 +246,9 @@ fn enterDetailsPanelFrame() void {
         state.ipc.subpanel_data = null;
     }
 
+    state.clearDetailsPluginId();
+    state.clearDetailsItemId();
+
     // Entering details doesn't always mean we need a Bun subpanel.
     state.ipc.subpanel_pending = false;
     const details = state.currentDetails() orelse return;
@@ -225,9 +257,11 @@ fn enterDetailsPanelFrame() void {
     const sel = search.getSelectedItem();
     if (sel) |s| switch (s) {
         .plugin => |item| {
+            state.setDetailsPluginId(item.pluginId);
+            const item_id: []const u8 = item.id orelse item.title;
+            state.setDetailsItemId(item_id);
             state.setSelectedItemInfo(item.title, item.subtitle orelse "");
             if (bun_process) |*proc| {
-                const item_id: []const u8 = item.id orelse item.title;
                 state.ipc.subpanel_pending = true;
                 proc.sendGetSubpanel(item.pluginId, item_id) catch |err| {
                     std.debug.print("Failed to request subpanel: {}\n", .{err});
@@ -246,6 +280,8 @@ fn leaveDetailsPanelFrame() void {
         state.ipc.subpanel_data = null;
     }
     state.ipc.subpanel_pending = false;
+    state.clearDetailsPluginId();
+    state.clearDetailsItemId();
 }
 
 fn handleDetailsPanelTransitionsFrame() void {
@@ -303,6 +339,7 @@ pub fn AppFrame() !dvui.App.Result {
     defer main_box.deinit();
 
     handleCommandExecutionFrame();
+    sendActionsIfQueuedFrame();
     handleDetailsPanelTransitionsFrame();
     try renderTopArea();
     sendQueryIfChangedFrame();

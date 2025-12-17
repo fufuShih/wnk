@@ -13,7 +13,9 @@ type PluginManifest = {
 type PluginResultItem = { id?: string; title: string; subtitle?: string; icon?: string };
 type ResultItem = { pluginId: string; id?: string; title: string; subtitle?: string; icon?: string };
 
-type SubpanelItem = { title: string; subtitle: string };
+type SubpanelItem = { id?: string; title: string; subtitle: string };
+
+type ActionItem = { name: string; title: string; text?: string; close_on_execute?: boolean };
 
 type PanelTop = { type: 'header'; title: string; subtitle?: string } | { type: 'selected' };
 type PanelBottom = { type: 'none' } | { type: 'info'; text: string };
@@ -28,6 +30,15 @@ type SubpanelData = { top: PanelTop; main: PanelNode; bottom?: PanelBottom };
 type PluginModule = {
   getResults: (query: string) => PluginResultItem[] | Promise<PluginResultItem[]>;
   getSubpanel?: (itemId: string) => SubpanelData | null | Promise<SubpanelData | null>;
+  getActions?: (ctx: {
+    panel: 'search' | 'details';
+    pluginId: string;
+    itemId: string;
+    selectedId?: string;
+    selectedText?: string;
+    query?: string;
+  }) => ActionItem[] | Promise<ActionItem[]>;
+  onCommand?: (name: string, text: string) => SubpanelData | null | void | Promise<SubpanelData | null | void>;
 };
 
 type LoadedPlugin = { manifest: PluginManifest; mod: PluginModule };
@@ -57,13 +68,23 @@ async function loadPlugins(): Promise<LoadedPlugin[]> {
     const entry = manifest.entry ?? './dist/bundle.js';
     const entryUrl = new URL(entry, pluginBase);
 
-    try {
-      const modAny: any = await import(entryUrl.href);
-      if (typeof modAny?.getResults !== 'function') continue;
-      loaded.push({ manifest, mod: modAny as PluginModule });
-    } catch {
-      continue;
+    const tryImport = async (href: string): Promise<any | null> => {
+      try {
+        return await import(href);
+      } catch (e: any) {
+        return null;
+      }
+    };
+
+    // Prefer bundled entry, but fall back to source during development.
+    let modAny: any = await tryImport(entryUrl.href);
+    if (!modAny) {
+      modAny = await tryImport(new URL('./src/index.tsx', pluginBase).href);
+      if (!modAny) modAny = await tryImport(new URL('./src/index.ts', pluginBase).href);
     }
+
+    if (typeof modAny?.getResults !== 'function') continue;
+    loaded.push({ manifest, mod: modAny as PluginModule });
   }
 
   // Stable order for rendering results.
@@ -161,9 +182,57 @@ async function drainStdinQueue(): Promise<void> {
           } catch {}
         })();
       } else if (msg.type === 'command') {
-        if (msg.name === 'setSearchText') {
+        const name = msg.name ?? '';
+        const text = msg.text ?? '';
+
+        if (name === 'setSearchText') {
           writeJson({ type: 'effect', name: 'setSearchText', text: msg.text ?? '' });
+          continue;
         }
+
+        const dot = name.indexOf('.');
+        if (dot <= 0) continue;
+
+        const pluginId = name.slice(0, dot);
+        const commandName = name.slice(dot + 1);
+
+        const plugin = plugins.find((p) => p.manifest.id === pluginId);
+        if (!plugin || typeof plugin.mod.onCommand !== 'function') continue;
+
+        void (async () => {
+          try {
+            const subpanel = await plugin.mod.onCommand?.(commandName, text);
+            if (subpanel) writeJson({ type: 'subpanel', pluginId, ...subpanel });
+          } catch {}
+        })();
+      } else if (msg.type === 'getActions') {
+        const token = msg.token ?? 0;
+        const panel = msg.panel === 'details' ? 'details' : 'search';
+        const pluginId = msg.pluginId ?? '';
+        const itemId = msg.itemId ?? '';
+        const selectedId = msg.selectedId ?? '';
+        const selectedText = msg.selectedText ?? '';
+        const query = msg.query ?? '';
+
+        const plugin = plugins.find((p) => p.manifest.id === pluginId);
+        if (!plugin || typeof plugin.mod.getActions !== 'function') {
+          writeJson({ type: 'actions', token, pluginId, items: [] });
+          continue;
+        }
+
+        void (async () => {
+          try {
+            const items = await plugin.mod.getActions?.({
+              panel,
+              pluginId,
+              itemId,
+              selectedId: selectedId || undefined,
+              selectedText: selectedText || undefined,
+              query: query || undefined,
+            });
+            writeJson({ type: 'actions', token, pluginId, items: items ?? [] });
+          } catch {}
+        })();
       } else {
         try { handleHostEvent(msg as HostEvent); } catch {}
       }

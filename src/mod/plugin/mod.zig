@@ -111,10 +111,27 @@ pub const BunProcess = struct {
         itemId: []const u8,
     };
 
+    pub const GetActionsMsg = struct {
+        type: []const u8 = "getActions",
+        token: u64,
+        /// "search" or "details"
+        panel: []const u8,
+        pluginId: []const u8,
+        /// Selected plugin result id (search) or root details item id (details).
+        itemId: []const u8,
+        /// Currently selected subpanel item id (details) when available.
+        selectedId: []const u8,
+        /// Human-readable selected text.
+        selectedText: []const u8,
+        /// Current query buffer (search input).
+        query: []const u8,
+    };
+
     pub const HostMessage = union(enum) {
         query: QueryMsg,
         command: CommandMsg,
         getSubpanel: GetSubpanelMsg,
+        getActions: GetActionsMsg,
     };
 
     pub fn sendMessage(self: *BunProcess, msg: HostMessage) !void {
@@ -122,6 +139,7 @@ pub const BunProcess = struct {
             .query => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
             .command => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
             .getSubpanel => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
+            .getActions => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
         };
         defer self.allocator.free(json_line);
         try self.sendEvent(json_line);
@@ -139,6 +157,27 @@ pub const BunProcess = struct {
         try self.sendMessage(.{ .getSubpanel = .{ .pluginId = plugin_id, .itemId = item_id } });
     }
 
+    pub fn sendGetActions(
+        self: *BunProcess,
+        token: u64,
+        panel: []const u8,
+        plugin_id: []const u8,
+        item_id: []const u8,
+        selected_id: []const u8,
+        selected_text: []const u8,
+        query: []const u8,
+    ) !void {
+        try self.sendMessage(.{ .getActions = .{
+            .token = token,
+            .panel = panel,
+            .pluginId = plugin_id,
+            .itemId = item_id,
+            .selectedId = selected_id,
+            .selectedText = selected_text,
+            .query = query,
+        } });
+    }
+
     pub fn deinit(self: *BunProcess) void {
         self.stdin_file.close();
         self.stdout_file.close();
@@ -151,4 +190,3 @@ pub const BunProcess = struct {
         self.pending_buffer.deinit(self.allocator);
     }
 };
-

@@ -47,9 +47,92 @@ pub fn updatePluginResults(allocator: std.mem.Allocator, json_str: []const u8) !
 }
 
 pub const SubpanelItem = struct {
+    id: ?[]const u8 = null,
     title: []const u8,
     subtitle: []const u8,
 };
+
+pub const ActionItem = struct {
+    name: []const u8,
+    title: []const u8,
+    /// Optional payload string; passed through to Bun as the command `text` field.
+    text: ?[]const u8 = null,
+    /// Optional behavior override; defaults to true in the host.
+    close_on_execute: ?bool = null,
+};
+
+pub const ActionsPayload = struct {
+    type: []const u8,
+    token: u64 = 0,
+    pluginId: []const u8 = "",
+    items: []ActionItem = &.{},
+};
+
+pub var actions_data: ?std.json.Parsed(ActionsPayload) = null;
+pub var actions_pending: bool = false;
+pub var actions_request_queued: bool = false;
+pub var actions_json: ?[]u8 = null;
+pub var actions_json_allocator: ?std.mem.Allocator = null;
+pub var actions_token_expected: u64 = 0;
+var actions_token_counter: u64 = 0;
+
+pub fn nextActionsToken() u64 {
+    actions_token_counter +%= 1;
+    actions_token_expected = actions_token_counter;
+    return actions_token_expected;
+}
+
+pub fn clearActionsData() void {
+    if (actions_data) |*a| {
+        a.deinit();
+        actions_data = null;
+    }
+    if (actions_json) |old_json| {
+        if (actions_json_allocator) |a| a.free(old_json);
+        actions_json = null;
+        actions_json_allocator = null;
+    }
+    actions_pending = false;
+    actions_request_queued = false;
+    actions_token_expected = 0;
+}
+
+pub fn queueActionsRequest() void {
+    actions_request_queued = true;
+}
+
+pub fn updateActionsData(allocator: std.mem.Allocator, json_str: []const u8) !void {
+    const json_copy = try allocator.dupe(u8, json_str);
+    errdefer allocator.free(json_copy);
+
+    var parsed = std.json.parseFromSlice(ActionsPayload, allocator, json_copy, .{ .ignore_unknown_fields = true }) catch return;
+    errdefer parsed.deinit();
+
+    if (!std.mem.eql(u8, parsed.value.type, "actions")) {
+        parsed.deinit();
+        allocator.free(json_copy);
+        return;
+    }
+
+    // Drop out-of-date responses (e.g., overlay was reopened).
+    if (parsed.value.token != actions_token_expected) {
+        parsed.deinit();
+        allocator.free(json_copy);
+        return;
+    }
+
+    if (actions_data) |*old| {
+        old.deinit();
+    }
+    if (actions_json) |old_json| {
+        (actions_json_allocator orelse allocator).free(old_json);
+    }
+
+    actions_data = parsed;
+    actions_json = json_copy;
+    actions_json_allocator = allocator;
+    actions_pending = false;
+}
 
 pub const PanelTopPayload = struct {
     /// "header" or "selected"

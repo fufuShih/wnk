@@ -7,10 +7,20 @@ pub const Command = struct {
     // Sent to Bun as { type: "command", name, text }
     name: []const u8,
     title: []const u8,
+    /// Optional payload string; sent as the command `text` field.
+    text: ?[]const u8 = null,
+    close_on_execute: bool = true,
 };
 
-const action_commands = [_]Command{
+const default_commands = [_]Command{
     .{ .name = "setSearchText", .title = "Use as query" },
+};
+
+var remote_commands: [64]Command = undefined;
+var remote_commands_len: usize = 0;
+
+const loading_commands = [_]Command{
+    .{ .name = "", .title = "Loading...", .close_on_execute = false },
 };
 
 /// Action overlay context helpers.
@@ -27,7 +37,6 @@ pub fn isMainFocused() bool {
 /// This is equivalent to a `hasCommand` flag for the current selection.
 pub fn hasCommand() bool {
     if (!isMainFocused()) return false;
-    if (actions().len == 0) return false;
     return commandTextOrNull() != null;
 }
 
@@ -41,6 +50,14 @@ pub fn openOverlay() void {
     if (!canOpenOverlay()) return;
     state.nav.action_open = true;
     state.command_selected_index = 0;
+
+    // Always clear stale remote actions on open.
+    state.ipc.clearActionsData();
+
+    // Request remote actions only when the focused selection belongs to a plugin.
+    if (bunActionsContextOrNull() != null) {
+        state.ipc.queueActionsRequest();
+    }
 }
 
 /// Returns the text sent to Bun when executing a command.
@@ -49,10 +66,26 @@ pub fn commandText() []const u8 {
     return commandTextOrNull() orelse state.getSelectedItemTitle();
 }
 
+pub fn commandPayload(cmd: Command) []const u8 {
+    if (cmd.text) |t| return t;
+    if (std.mem.eql(u8, cmd.name, "setSearchText")) return commandText();
+    return commandText();
+}
+
 /// Returns the action list for the current selection.
 /// This is where per-region / per-item actions can be dispatched in the future.
 pub fn actions() []const Command {
-    return action_commands[0..];
+    if (buildRemoteCommands()) |list| {
+        if (list.len > 0) return list;
+        // While a plugin action request is queued/in-flight, keep the overlay open with a placeholder.
+        if (state.nav.action_open and (state.ipc.actions_request_queued or state.ipc.actions_pending)) {
+            return loading_commands[0..];
+        }
+    } else if (state.nav.action_open and (state.ipc.actions_request_queued or state.ipc.actions_pending)) {
+        return loading_commands[0..];
+    }
+
+    return default_commands[0..];
 }
 
 /// Returns the action at the given index for the current selection.
@@ -67,6 +100,86 @@ fn commandTextOrNull() ?[]const u8 {
         .search => selectedTextFromSearch(),
         .details => selectedTextFromDetails(),
     };
+}
+
+pub const BunActionsContext = struct {
+    panel: []const u8,
+    plugin_id: []const u8,
+    item_id: []const u8,
+    selected_id: []const u8,
+    selected_text: []const u8,
+    query: []const u8,
+};
+
+/// Returns the current context for requesting plugin-provided actions from Bun.
+/// If the selection is not a plugin-owned item, returns null.
+pub fn bunActionsContextOrNull() ?BunActionsContext {
+    if (!isMainFocused()) return null;
+
+    const query = state.search_buffer[0..state.search_len];
+
+    if (state.currentPanel() == .search) {
+        const sel = search.getSelectedItem() orelse return null;
+        return switch (sel) {
+            .plugin => |item| .{
+                .panel = "search",
+                .plugin_id = item.pluginId,
+                .item_id = item.id orelse item.title,
+                .selected_id = item.id orelse item.title,
+                .selected_text = item.title,
+                .query = query,
+            },
+            .mock => null,
+        };
+    }
+
+    // Details panel: only plugin-owned details can provide actions.
+    const d = state.currentDetails() orelse return null;
+    if (d.source != .plugin) return null;
+
+    const plugin_id = state.getDetailsPluginId();
+    if (plugin_id.len == 0) return null;
+
+    const item_id = if (state.getDetailsItemId().len > 0) state.getDetailsItemId() else state.getSelectedItemTitle();
+
+    var selected_id: []const u8 = "";
+    var selected_text: []const u8 = state.getSelectedItemTitle();
+
+    if (state.ipc.currentSubpanelView()) |v| {
+        if (state.ipc.subpanelItemAtIndex(v.main, d.selected_index)) |it| {
+            selected_id = it.id orelse it.title;
+            selected_text = it.title;
+        }
+    }
+
+    return .{
+        .panel = "details",
+        .plugin_id = plugin_id,
+        .item_id = item_id,
+        .selected_id = selected_id,
+        .selected_text = selected_text,
+        .query = query,
+    };
+}
+
+fn buildRemoteCommands() ?[]const Command {
+    const parsed = state.ipc.actions_data orelse return null;
+
+    remote_commands_len = 0;
+    const n = @min(parsed.value.items.len, remote_commands.len);
+    var i: usize = 0;
+    while (i < n) : (i += 1) {
+        const it = parsed.value.items[i];
+        remote_commands[i] = .{
+            .name = it.name,
+            .title = it.title,
+            .text = it.text,
+            .close_on_execute = it.close_on_execute orelse true,
+        };
+    }
+    remote_commands_len = n;
+
+    return remote_commands[0..remote_commands_len];
 }
 
 fn selectedTextFromSearch() ?[]const u8 {

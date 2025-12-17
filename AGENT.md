@@ -19,10 +19,12 @@ Host -> Bun
 - `{ "type": "query", "text": "..." }`
 - `{ "type": "getSubpanel", "pluginId": "...", "itemId": "..." }`
 - `{ "type": "command", "name": "...", "text": "..." }`
+- `{ "type": "getActions", "token": 1, "panel": "search" | "details", "pluginId": "...", "itemId": "...", "selectedId": "...", "selectedText": "...", "query": "..." }`
 
 Bun -> Host
 - `{ "type": "results", "items": [...] }`
 - `{ "type": "subpanel", ... }` (details schema; see `src/mod/state/ipc.zig`)
+- `{ "type": "actions", "token": 1, "pluginId": "...", "items": [...] }`
 - `{ "type": "effect", "name": "...", "text": "..." }`
 
 ## Notes

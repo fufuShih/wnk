@@ -1,0 +1,7 @@
+{
+  "id": "todo",
+  "name": "Todo",
+  "icon": "T",
+  "entry": "./dist/bundle.js"
+}
+

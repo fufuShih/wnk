@@ -6,7 +6,8 @@
     "start": "bun run runtime.tsx",
     "build:calculator": "bun build plugins/calculator/src/index.tsx --outfile plugins/calculator/dist/bundle.js --external react",
     "build:weather": "bun build plugins/weather/src/index.tsx --outfile plugins/weather/dist/bundle.js --external react",
-    "build:plugins": "bun run build:calculator && bun run build:weather"
+    "build:todo": "bun build plugins/todo/src/index.tsx --outfile plugins/todo/dist/bundle.js --external react",
+    "build:plugins": "bun run build:calculator && bun run build:weather && bun run build:todo"
   },
   "dependencies": {
     "react": "^18.2.0",

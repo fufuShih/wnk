@@ -25,6 +25,9 @@ pub var nav: nav_mod.Navigation = .{};
 
 pub fn resetPanels() void {
     nav.resetPanels();
+    clearDetailsPluginId();
+    clearDetailsItemId();
+    ipc.clearActionsData();
 }
 
 pub fn currentPanel() Panel {
@@ -86,6 +89,14 @@ pub var selected_item_title_len: usize = 0;
 pub var selected_item_subtitle: [256]u8 = undefined;
 pub var selected_item_subtitle_len: usize = 0;
 
+// Active plugin id for the current details panel (if any).
+pub var details_plugin_id: [64]u8 = undefined;
+pub var details_plugin_id_len: usize = 0;
+
+// Active plugin item id for the current details panel (if any).
+pub var details_item_id: [256]u8 = undefined;
+pub var details_item_id_len: usize = 0;
+
 pub fn setSelectedItemInfo(title: []const u8, subtitle: []const u8) void {
     const t_len = @min(title.len, selected_item_title.len);
     @memcpy(selected_item_title[0..t_len], title[0..t_len]);
@@ -102,6 +113,34 @@ pub fn getSelectedItemTitle() []const u8 {
 
 pub fn getSelectedItemSubtitle() []const u8 {
     return selected_item_subtitle[0..selected_item_subtitle_len];
+}
+
+pub fn setDetailsPluginId(plugin_id: []const u8) void {
+    const n = @min(plugin_id.len, details_plugin_id.len);
+    @memcpy(details_plugin_id[0..n], plugin_id[0..n]);
+    details_plugin_id_len = n;
+}
+
+pub fn clearDetailsPluginId() void {
+    details_plugin_id_len = 0;
+}
+
+pub fn getDetailsPluginId() []const u8 {
+    return details_plugin_id[0..details_plugin_id_len];
+}
+
+pub fn setDetailsItemId(item_id: []const u8) void {
+    const n = @min(item_id.len, details_item_id.len);
+    @memcpy(details_item_id[0..n], item_id[0..n]);
+    details_item_id_len = n;
+}
+
+pub fn clearDetailsItemId() void {
+    details_item_id_len = 0;
+}
+
+pub fn getDetailsItemId() []const u8 {
+    return details_item_id[0..details_item_id_len];
 }
 
 pub const SearchResult = mock.SearchResult;
@@ -127,6 +166,8 @@ pub fn init(allocator: std.mem.Allocator) void {
     ipc.plugin_results_allocator = allocator;
     ipc.results_pending = false;
     ipc.subpanel_pending = false;
+    ipc.actions_pending = false;
+    ipc.actions_request_queued = false;
 
     resetPanels();
     command_selected_index = 0;
@@ -134,6 +175,8 @@ pub fn init(allocator: std.mem.Allocator) void {
 
     selected_item_title_len = 0;
     selected_item_subtitle_len = 0;
+    details_plugin_id_len = 0;
+    details_item_id_len = 0;
 }
 
 pub fn setSearchText(text: []const u8) void {
@@ -162,6 +205,15 @@ pub fn deinit() void {
         ipc.subpanel_json = null;
         ipc.subpanel_json_allocator = null;
     }
+    if (ipc.actions_data) |*a| {
+        a.deinit();
+        ipc.actions_data = null;
+    }
+    if (ipc.actions_json) |buf| {
+        if (ipc.actions_json_allocator) |a| a.free(buf);
+        ipc.actions_json = null;
+        ipc.actions_json_allocator = null;
+    }
 }
 
 pub fn handleBunMessage(allocator: std.mem.Allocator, json_str: []const u8) void {
@@ -184,6 +236,15 @@ pub fn handleBunMessage(allocator: std.mem.Allocator, json_str: []const u8) void
 
     if (std.mem.eql(u8, type_val.string, "subpanel")) {
         ipc.updateSubpanelData(allocator, json_str) catch {};
+        // If the action overlay is open in plugin details, refresh actions to reflect updates.
+        if (nav.action_open and currentPanel() == .details and details_plugin_id_len > 0) {
+            ipc.queueActionsRequest();
+        }
+        return;
+    }
+
+    if (std.mem.eql(u8, type_val.string, "actions")) {
+        ipc.updateActionsData(allocator, json_str) catch {};
         return;
     }
 
