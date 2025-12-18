@@ -1,5 +1,7 @@
 type Spacing = number | { x?: number; y?: number; top?: number; right?: number; bottom?: number; left?: number };
 
+import type { ActionItem, PanelBottom, PanelTop } from './ipc';
+
 export interface Style {
   display?: 'flex' | 'grid';
   flexDirection?: 'row' | 'column';
@@ -39,7 +41,26 @@ export interface BaseProps {
   [key: string]: unknown;
 }
 
-export interface BoxProps extends BaseProps { onPress?: () => void; }
+export interface BoxProps extends BaseProps {
+  // Host events (optional).
+  onPress?: () => void;
+
+  // Panel metadata (read by Bun -> Zig panel conversion).
+  top?: PanelTop;
+  bottom?: PanelBottom;
+  actions?: ActionItem[];
+
+  // Layout hints (read by Bun -> Zig panel conversion).
+  dir?: 'vertical' | 'horizontal';
+  gap?: number;
+  layout?: 'flex' | 'grid';
+  columns?: number;
+
+  // Leaf nodes with `title` become selectable items.
+  id?: string;
+  title?: string;
+  subtitle?: string;
+}
 export interface TextProps extends Omit<BaseProps, 'children'> { children?: string | number; bold?: boolean; italic?: boolean; }
 export interface ButtonProps extends Omit<BaseProps, 'children'> { children?: string; onPress: () => void; disabled?: boolean; variant?: 'primary' | 'secondary' | 'ghost'; }
 export interface InputProps extends Omit<BaseProps, 'children'> { value: string; onChange: (value: string) => void; placeholder?: string; disabled?: boolean; autoFocus?: boolean; }

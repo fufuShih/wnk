@@ -5,7 +5,7 @@
 // ============================================
 
 import type { ResultItem } from '@wnk/sdk';
-import { Flex, GridItems, Item, Panel } from '@wnk/sdk';
+import { Box } from '@wnk/sdk';
 
 type WeatherData = {
   city: string;
@@ -92,38 +92,40 @@ type WeatherPanelProps = {
 function WeatherPanel(props: WeatherPanelProps): JSX.Element {
   if (!props.weather || !props.forecast) {
     return (
-      <Panel
+      <Box
         top={{ type: 'header', title: 'Weather', subtitle: 'Unable to load weather data' }}
         bottom={{ type: 'info', text: 'Status: offline' }}
+        dir="vertical"
+        gap={12}
       >
-        <Flex>
-          <Item title="Offline" subtitle="No cached forecast available" />
-        </Flex>
-      </Panel>
+        <Box layout="flex">
+          <Box title="Offline" subtitle="No cached forecast available" />
+        </Box>
+      </Box>
     );
   }
 
   return (
-    <Panel
+    <Box
       top={{ type: 'header', title: 'Weather', subtitle: '7-day forecast' }}
       bottom={{ type: 'info', text: 'Data: Open-Meteo · Cache: 10m' }}
       dir="vertical"
       gap={12}
     >
-      <Flex>
-        <Item title={`${props.weather.city}  ${props.weather.temp}°C`} subtitle={props.weather.description} />
-      </Flex>
+      <Box layout="flex">
+        <Box title={`${props.weather.city}  ${props.weather.temp}°C`} subtitle={props.weather.description} />
+      </Box>
 
-      <GridItems columns={2} gap={12}>
+      <Box layout="grid" columns={2} gap={12}>
         {props.forecast.map((day) => (
-          <Item
+          <Box
             key={day.date}
             title={`${day.date}  ${day.temp_max}° / ${day.temp_min}°`}
             subtitle={getWeatherDescription(day.weatherCode)}
           />
         ))}
-      </GridItems>
-    </Panel>
+      </Box>
+    </Box>
   );
 }
 
@@ -147,4 +149,3 @@ export async function getPanel(itemId: string): Promise<JSX.Element | null> {
 }
 
 export default WeatherPanel;
-

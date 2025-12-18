@@ -7,7 +7,7 @@
 // ============================================
 
 import type { ActionItem, ResultItem } from '@wnk/sdk';
-import { Box, Flex, Item, Panel } from '@wnk/sdk';
+import { Box } from '@wnk/sdk';
 
 type Todo = { id: number; text: string; done: boolean };
 
@@ -59,24 +59,24 @@ function TodoPanel(): JSX.Element {
   }));
 
   return (
-    <Panel
+    <Box
       top={{ type: 'header', title: 'Todo', subtitle: `${pending} pending \u00b7 ${done} done (session only)` }}
       bottom={{ type: 'info', text: 'W/S: move  Enter: open/actions  k: actions  Esc: back  |  Add: type "todo <text>"' }}
       actions={actions}
+      dir="vertical"
+      gap={12}
     >
-      <Box dir="vertical" gap={12}>
-        <Flex>
-          {todos.map((t) => (
-            <Item
-              key={t.id}
-              id={String(t.id)}
-              title={`${t.done ? CHECK_DONE : CHECK_EMPTY} ${t.text}`}
-              subtitle=""
-            />
-          ))}
-        </Flex>
+      <Box layout="flex">
+        {todos.map((t) => (
+          <Box
+            key={t.id}
+            id={String(t.id)}
+            title={`${t.done ? CHECK_DONE : CHECK_EMPTY} ${t.text}`}
+            subtitle=""
+          />
+        ))}
       </Box>
-    </Panel>
+    </Box>
   );
 }
 

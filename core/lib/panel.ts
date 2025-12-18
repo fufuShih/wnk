@@ -58,6 +58,7 @@ function parseActions(value: unknown): ActionItem[] | undefined {
 
 function tryParseItem(node: SerializedNode): PanelItem | null {
   if (node.type !== 'Box') return null;
+  if ((node.children?.length ?? 0) > 0) return null;
   const title = asString(node.props.title);
   if (!title) return null;
   const subtitle = asString(node.props.subtitle) ?? '';
