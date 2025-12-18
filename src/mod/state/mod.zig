@@ -13,8 +13,8 @@ pub const default_panel = nav_mod.default_panel;
 
 pub const PluginResultItem = ipc.PluginResultItem;
 pub const PluginResultsPayload = ipc.PluginResultsPayload;
-pub const SubpanelItem = ipc.SubpanelItem;
-pub const SubpanelPayload = ipc.SubpanelPayload;
+pub const PanelItem = ipc.PanelItem;
+pub const PanelPayload = ipc.PanelPayload;
 
 // Search buffer for the input field
 pub var search_buffer: [256]u8 = undefined;
@@ -165,7 +165,7 @@ pub fn init(allocator: std.mem.Allocator) void {
     search_initialized = true;
     ipc.plugin_results_allocator = allocator;
     ipc.results_pending = false;
-    ipc.subpanel_pending = false;
+    ipc.panel_pending = false;
     ipc.actions_pending = false;
     ipc.actions_request_queued = false;
 
@@ -196,14 +196,14 @@ pub fn deinit() void {
         ipc.plugin_results_json = null;
         ipc.plugin_results_json_allocator = null;
     }
-    if (ipc.subpanel_data) |*s| {
+    if (ipc.panel_data) |*s| {
         s.deinit();
-        ipc.subpanel_data = null;
+        ipc.panel_data = null;
     }
-    if (ipc.subpanel_json) |buf| {
-        if (ipc.subpanel_json_allocator) |a| a.free(buf);
-        ipc.subpanel_json = null;
-        ipc.subpanel_json_allocator = null;
+    if (ipc.panel_json) |buf| {
+        if (ipc.panel_json_allocator) |a| a.free(buf);
+        ipc.panel_json = null;
+        ipc.panel_json_allocator = null;
     }
     if (ipc.actions_data) |*a| {
         a.deinit();
@@ -234,8 +234,8 @@ pub fn handleBunMessage(allocator: std.mem.Allocator, json_str: []const u8) void
         return;
     }
 
-    if (std.mem.eql(u8, type_val.string, "subpanel")) {
-        ipc.updateSubpanelData(allocator, json_str) catch {};
+    if (std.mem.eql(u8, type_val.string, "panel")) {
+        ipc.updatePanelData(allocator, json_str) catch {};
         // If the action overlay is open in plugin details, refresh actions to reflect updates.
         if (nav.action_open and currentPanel() == .details and details_plugin_id_len > 0) {
             ipc.queueActionsRequest();

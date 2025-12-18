@@ -105,8 +105,8 @@ pub const BunProcess = struct {
         text: []const u8,
     };
 
-    pub const GetSubpanelMsg = struct {
-        type: []const u8 = "getSubpanel",
+    pub const GetPanelMsg = struct {
+        type: []const u8 = "getPanel",
         pluginId: []const u8,
         itemId: []const u8,
     };
@@ -119,7 +119,7 @@ pub const BunProcess = struct {
         pluginId: []const u8,
         /// Selected plugin result id (search) or root details item id (details).
         itemId: []const u8,
-        /// Currently selected subpanel item id (details) when available.
+        /// Currently selected panel item id (details) when available.
         selectedId: []const u8,
         /// Human-readable selected text.
         selectedText: []const u8,
@@ -130,7 +130,7 @@ pub const BunProcess = struct {
     pub const HostMessage = union(enum) {
         query: QueryMsg,
         command: CommandMsg,
-        getSubpanel: GetSubpanelMsg,
+        getPanel: GetPanelMsg,
         getActions: GetActionsMsg,
     };
 
@@ -138,7 +138,7 @@ pub const BunProcess = struct {
         const json_line = switch (msg) {
             .query => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
             .command => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
-            .getSubpanel => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
+            .getPanel => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
             .getActions => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
         };
         defer self.allocator.free(json_line);
@@ -153,8 +153,8 @@ pub const BunProcess = struct {
         try self.sendMessage(.{ .command = .{ .name = name, .text = text } });
     }
 
-    pub fn sendGetSubpanel(self: *BunProcess, plugin_id: []const u8, item_id: []const u8) !void {
-        try self.sendMessage(.{ .getSubpanel = .{ .pluginId = plugin_id, .itemId = item_id } });
+    pub fn sendGetPanel(self: *BunProcess, plugin_id: []const u8, item_id: []const u8) !void {
+        try self.sendMessage(.{ .getPanel = .{ .pluginId = plugin_id, .itemId = item_id } });
     }
 
     pub fn sendGetActions(

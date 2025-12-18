@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { SerializedNode } from '../sdk/types';
-import type { ActionItem, PanelBottom, PanelNode, PanelTop, SubpanelData, SubpanelItem } from '../sdk/ipc';
+import type { ActionItem, PanelBottom, PanelData, PanelItem, PanelNode, PanelTop } from '../sdk/ipc';
 import { renderOnce } from './render-once';
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -56,7 +56,7 @@ function parseActions(value: unknown): ActionItem[] | undefined {
   return out;
 }
 
-function tryParseItem(node: SerializedNode): SubpanelItem | null {
+function tryParseItem(node: SerializedNode): PanelItem | null {
   if (node.type !== 'Box') return null;
   const title = asString(node.props.title);
   if (!title) return null;
@@ -108,7 +108,7 @@ function toPanelNode(node: SerializedNode): PanelNode | null {
   const props = node.props ?? {};
   const children = node.children ?? [];
 
-  const items: SubpanelItem[] = [];
+  const items: PanelItem[] = [];
   let allChildrenAreItems = children.length > 0;
   for (const c of children) {
     const it = tryParseItem(c);
@@ -137,7 +137,7 @@ function toPanelNode(node: SerializedNode): PanelNode | null {
   }
 
   const outChildren: PanelNode[] = [];
-  let pending: SubpanelItem[] = [];
+  let pending: PanelItem[] = [];
   const flush = (): void => {
     if (pending.length === 0) return;
     outChildren.push({ type: 'flex', items: pending });
@@ -166,15 +166,15 @@ function toPanelNode(node: SerializedNode): PanelNode | null {
   };
 }
 
-export type RenderedSubpanel = {
-  subpanel: SubpanelData;
+export type RenderedPanel = {
+  panel: PanelData;
   actions?: ActionItem[];
 };
 
-export function subpanelFromSerializedRoot(
+export function panelFromSerializedRoot(
   root: SerializedNode | null,
   defaults?: { title?: string; subtitle?: string }
-): RenderedSubpanel {
+): RenderedPanel {
   const fallbackTop: PanelTop = {
     type: 'header',
     title: defaults?.title ?? '',
@@ -183,7 +183,7 @@ export function subpanelFromSerializedRoot(
 
   if (!root) {
     return {
-      subpanel: {
+      panel: {
         top: fallbackTop,
         main: { type: 'flex', items: [] },
         bottom: { type: 'none' },
@@ -206,15 +206,15 @@ export function subpanelFromSerializedRoot(
   const main = toPanelNode(root) ?? { type: 'flex', items: [] };
 
   return {
-    subpanel: { top, main, bottom },
+    panel: { top, main, bottom },
     ...(actions && actions.length ? { actions } : {}),
   };
 }
 
-export async function subpanelFromReactNode(
+export async function panelFromReactNode(
   element: ReactNode,
   defaults?: { title?: string; subtitle?: string }
-): Promise<RenderedSubpanel> {
+): Promise<RenderedPanel> {
   const payload = await renderOnce(element);
-  return subpanelFromSerializedRoot(payload.root, defaults);
+  return panelFromSerializedRoot(payload.root, defaults);
 }

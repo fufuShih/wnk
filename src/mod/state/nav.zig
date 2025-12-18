@@ -82,7 +82,7 @@ pub const Navigation = struct {
         }
 
         // plugin details: only selectable when data exists
-        if (ipc.currentSubpanelView()) |v| return ipc.subpanelItemsCount(v.main);
+        if (ipc.currentPanelView()) |v| return ipc.panelItemsCount(v.main);
         return 0;
     }
 

@@ -5,7 +5,7 @@ export type ResultItem = {
   icon?: string;
 };
 
-export type SubpanelItem = {
+export type PanelItem = {
   id?: string;
   title: string;
   subtitle: string;
@@ -27,13 +27,12 @@ export type PanelBottom =
   | { type: 'info'; text: string };
 
 export type PanelNode =
-  | { type: 'flex'; items: SubpanelItem[] }
-  | { type: 'grid'; columns?: number; gap?: number; items: SubpanelItem[] }
+  | { type: 'flex'; items: PanelItem[] }
+  | { type: 'grid'; columns?: number; gap?: number; items: PanelItem[] }
   | { type: 'box'; dir?: 'vertical' | 'horizontal'; gap?: number; children: PanelNode[] };
 
-export type SubpanelData = {
+export type PanelData = {
   top: PanelTop;
   main: PanelNode;
   bottom?: PanelBottom;
 };
-

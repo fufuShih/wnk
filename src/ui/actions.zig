@@ -145,8 +145,8 @@ pub fn bunActionsContextOrNull() ?BunActionsContext {
     var selected_id: []const u8 = "";
     var selected_text: []const u8 = state.getSelectedItemTitle();
 
-    if (state.ipc.currentSubpanelView()) |v| {
-        if (state.ipc.subpanelItemAtIndex(v.main, d.selected_index)) |it| {
+    if (state.ipc.currentPanelView()) |v| {
+        if (state.ipc.panelItemAtIndex(v.main, d.selected_index)) |it| {
             selected_id = it.id orelse it.title;
             selected_text = it.title;
         }
@@ -212,8 +212,8 @@ fn selectedTextFromDetails() ?[]const u8 {
     }
 
     // Plugin details: prefer the selected IPC item (if loaded).
-    if (state.ipc.currentSubpanelView()) |v| {
-        if (state.ipc.subpanelItemAtIndex(v.main, d.selected_index)) |it| {
+    if (state.ipc.currentPanelView()) |v| {
+        if (state.ipc.panelItemAtIndex(v.main, d.selected_index)) |it| {
             return it.title;
         }
     }

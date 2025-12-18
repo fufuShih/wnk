@@ -240,17 +240,17 @@ fn sendQueryIfChangedFrame() void {
 }
 
 fn enterDetailsPanelFrame() void {
-    // Clear old subpanel data
-    if (state.ipc.subpanel_data) |*s| {
+    // Clear old panel data
+    if (state.ipc.panel_data) |*s| {
         s.deinit();
-        state.ipc.subpanel_data = null;
+        state.ipc.panel_data = null;
     }
 
     state.clearDetailsPluginId();
     state.clearDetailsItemId();
 
-    // Entering details doesn't always mean we need a Bun subpanel.
-    state.ipc.subpanel_pending = false;
+    // Entering details doesn't always mean we need a Bun panel.
+    state.ipc.panel_pending = false;
     const details = state.currentDetails() orelse return;
     if (details.source != .plugin) return;
 
@@ -262,10 +262,10 @@ fn enterDetailsPanelFrame() void {
             state.setDetailsItemId(item_id);
             state.setSelectedItemInfo(item.title, item.subtitle orelse "");
             if (bun_process) |*proc| {
-                state.ipc.subpanel_pending = true;
-                proc.sendGetSubpanel(item.pluginId, item_id) catch |err| {
-                    std.debug.print("Failed to request subpanel: {}\n", .{err});
-                    state.ipc.subpanel_pending = false;
+                state.ipc.panel_pending = true;
+                proc.sendGetPanel(item.pluginId, item_id) catch |err| {
+                    std.debug.print("Failed to request panel: {}\n", .{err});
+                    state.ipc.panel_pending = false;
                 };
             }
         },
@@ -275,11 +275,11 @@ fn enterDetailsPanelFrame() void {
 }
 
 fn leaveDetailsPanelFrame() void {
-    if (state.ipc.subpanel_data) |*s| {
+    if (state.ipc.panel_data) |*s| {
         s.deinit();
-        state.ipc.subpanel_data = null;
+        state.ipc.panel_data = null;
     }
-    state.ipc.subpanel_pending = false;
+    state.ipc.panel_pending = false;
     state.clearDetailsPluginId();
     state.clearDetailsItemId();
 }

@@ -5,7 +5,7 @@
 This folder contains the Bun/TypeScript runtime that:
 - reads newline-delimited JSON from stdin (from the Zig host)
 - writes newline-delimited JSON to stdout (back to the host)
-- aggregates plugin results/subpanels
+- aggregates plugin results/panels
 
 ## Quick Commands
 - Start runtime (expects host input): `cd core; bun run start`
@@ -14,11 +14,11 @@ This folder contains the Bun/TypeScript runtime that:
 ## Runtime Entry
 - `core/runtime.tsx` routes messages:
   - `query` -> merges plugin `getResults(...)` output and emits `results`
-  - `getSubpanel` -> emits `subpanel` (used by the host details panel)
+  - `getPanel` -> emits `panel` (used by the host details panel)
   - `command` -> may emit `effect` (e.g. `setSearchText`)
 
 ## Plugins
 - Source: `core/plugins/*/src/`
 - Built bundles (imported by `runtime.tsx`): `core/plugins/*/dist/bundle.js`
-- Each plugin bundle exports functions used by the runtime (e.g. `getResults`, optional `getSubpanel`).
+- Each plugin bundle exports functions used by the runtime (e.g. `getResults`, optional `getPanel`).
 - Plugins declare metadata in `core/plugins/*/manifest.json` (loaded by the runtime).

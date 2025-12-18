@@ -1,8 +1,8 @@
 import { handleHostEvent, type HostEvent } from './lib';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createElement, Fragment, isValidElement, type ReactNode } from 'react';
-import type { ActionItem, ResultItem as PluginResultItem, SubpanelData } from './sdk/ipc';
-import { subpanelFromReactNode, type RenderedSubpanel } from './lib/subpanel';
+import type { ActionItem, PanelData, ResultItem as PluginResultItem } from './sdk/ipc';
+import { panelFromReactNode, type RenderedPanel } from './lib/panel';
 
 declare const process: any;
 
@@ -17,7 +17,7 @@ type ResultItem = { pluginId: string; id?: string; title: string; subtitle?: str
 
 type PluginModule = {
   getResults: (query: string) => PluginResultItem[] | Promise<PluginResultItem[]>;
-  getSubpanel?: (itemId: string) => SubpanelData | ReactNode | null | Promise<SubpanelData | ReactNode | null>;
+  getPanel?: (itemId: string) => PanelData | ReactNode | null | Promise<PanelData | ReactNode | null>;
   getActions?: (ctx: {
     panel: 'search' | 'details';
     pluginId: string;
@@ -26,7 +26,7 @@ type PluginModule = {
     selectedText?: string;
     query?: string;
   }) => ActionItem[] | Promise<ActionItem[]>;
-  onCommand?: (name: string, text: string) => SubpanelData | ReactNode | null | void | Promise<SubpanelData | ReactNode | null | void>;
+  onCommand?: (name: string, text: string) => PanelData | ReactNode | null | void | Promise<PanelData | ReactNode | null | void>;
 };
 
 type LoadedPlugin = { manifest: PluginManifest; mod: PluginModule };
@@ -35,22 +35,22 @@ function writeJson(obj: object): void {
   console.log(JSON.stringify(obj));
 }
 
-function isSubpanelData(value: unknown): value is SubpanelData {
+function isPanelData(value: unknown): value is PanelData {
   return typeof value === 'object' && value !== null && !Array.isArray(value) && 'top' in value && 'main' in value;
 }
 
-function normalizeSubpanelReactNode(node: ReactNode): ReactNode {
+function normalizePanelReactNode(node: ReactNode): ReactNode {
   if (Array.isArray(node)) return createElement('wnk-box', null, node);
   if (isValidElement(node) && node.type === Fragment) return createElement('wnk-box', null, node);
   return node;
 }
 
-async function renderSubpanelOutput(
+async function renderPanelOutput(
   output: unknown,
   defaults?: { title?: string; subtitle?: string }
-): Promise<RenderedSubpanel | null> {
+): Promise<RenderedPanel | null> {
   if (output === null || output === undefined) return null;
-  if (isSubpanelData(output)) return { subpanel: output };
+  if (isPanelData(output)) return { panel: output };
 
   let node: ReactNode;
   if (typeof output === 'function') {
@@ -67,7 +67,7 @@ async function renderSubpanelOutput(
     return null;
   }
 
-  return await subpanelFromReactNode(normalizeSubpanelReactNode(node), defaults);
+  return await panelFromReactNode(normalizePanelReactNode(node), defaults);
 }
 
 async function loadPlugins(): Promise<LoadedPlugin[]> {
@@ -118,7 +118,7 @@ async function loadPlugins(): Promise<LoadedPlugin[]> {
 const plugins: LoadedPlugin[] = await loadPlugins();
 
 let latestQueryToken = 0;
-let latestSubpanelToken = 0;
+let latestPanelToken = 0;
 const lastDetailsItemByPlugin = new Map<string, string>();
 const actionsCache = new Map<string, ActionItem[]>();
 
@@ -171,16 +171,16 @@ async function drainStdinQueue(): Promise<void> {
             } catch {}
           })();
         }
-      } else if (msg.type === 'getSubpanel') {
-        const token = ++latestSubpanelToken;
+      } else if (msg.type === 'getPanel') {
+        const token = ++latestPanelToken;
         const pluginId = msg.pluginId ?? '';
         const itemId = msg.itemId ?? '';
         if (pluginId && itemId) lastDetailsItemByPlugin.set(pluginId, itemId);
 
         const plugin = plugins.find((p) => p.manifest.id === pluginId);
-        if (!plugin || typeof plugin.mod.getSubpanel !== 'function') {
+        if (!plugin || typeof plugin.mod.getPanel !== 'function') {
           writeJson({
-            type: 'subpanel',
+            type: 'panel',
             pluginId,
             top: { type: 'header', title: itemId },
             main: { type: 'flex', items: [] },
@@ -191,20 +191,20 @@ async function drainStdinQueue(): Promise<void> {
 
         void (async () => {
           try {
-            const subpanel = await plugin.mod.getSubpanel?.(itemId);
-            if (token !== latestSubpanelToken) return;
+            const panel = await plugin.mod.getPanel?.(itemId);
+            if (token !== latestPanelToken) return;
 
-            const rendered = await renderSubpanelOutput(subpanel, { title: itemId });
-              if (token !== latestSubpanelToken) return;
+            const rendered = await renderPanelOutput(panel, { title: itemId });
+            if (token !== latestPanelToken) return;
 
             if (rendered) {
               if (rendered.actions) actionsCache.set(`${pluginId}:${itemId}`, rendered.actions);
               else actionsCache.delete(`${pluginId}:${itemId}`);
-              writeJson({ type: 'subpanel', pluginId, ...rendered.subpanel });
+              writeJson({ type: 'panel', pluginId, ...rendered.panel });
             } else {
               actionsCache.delete(`${pluginId}:${itemId}`);
               writeJson({
-                type: 'subpanel',
+                type: 'panel',
                 pluginId,
                 top: { type: 'header', title: itemId },
                 main: { type: 'flex', items: [] },
@@ -233,17 +233,17 @@ async function drainStdinQueue(): Promise<void> {
 
         void (async () => {
           try {
-            const subpanel = await plugin.mod.onCommand?.(commandName, text);
-            if (!subpanel) return;
+            const panel = await plugin.mod.onCommand?.(commandName, text);
+            if (!panel) return;
 
-            const rendered = await renderSubpanelOutput(subpanel, { title: pluginId });
+            const rendered = await renderPanelOutput(panel, { title: pluginId });
             if (rendered) {
               const itemId = lastDetailsItemByPlugin.get(pluginId);
               if (itemId) {
                 if (rendered.actions) actionsCache.set(`${pluginId}:${itemId}`, rendered.actions);
                 else actionsCache.delete(`${pluginId}:${itemId}`);
               }
-              writeJson({ type: 'subpanel', pluginId, ...rendered.subpanel });
+              writeJson({ type: 'panel', pluginId, ...rendered.panel });
             }
           } catch {}
         })();
@@ -283,9 +283,9 @@ async function drainStdinQueue(): Promise<void> {
               return;
             }
 
-            if (panel === 'details' && typeof plugin.mod.getSubpanel === 'function') {
-              const maybePanel = await plugin.mod.getSubpanel(itemId);
-              const rendered = await renderSubpanelOutput(maybePanel, { title: itemId });
+            if (panel === 'details' && typeof plugin.mod.getPanel === 'function') {
+              const maybePanel = await plugin.mod.getPanel(itemId);
+              const rendered = await renderPanelOutput(maybePanel, { title: itemId });
               if (rendered) {
                 if (rendered.actions) actionsCache.set(`${pluginId}:${itemId}`, rendered.actions);
                 writeJson({ type: 'actions', token, pluginId, items: rendered.actions ?? [] });

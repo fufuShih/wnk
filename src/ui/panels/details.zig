@@ -25,7 +25,7 @@ pub const top = struct {
         }
 
         // Plugin details: prefer the IPC-provided header if available.
-        if (state.ipc.currentSubpanelView()) |v| {
+        if (state.ipc.currentPanelView()) |v| {
             const title = if (v.title.len > 0) v.title else state.getSelectedItemTitle();
             const subtitle = if (v.subtitle.len > 0) v.subtitle else state.getSelectedItemSubtitle();
             return .{ .title = title, .subtitle = subtitle };
@@ -47,7 +47,7 @@ pub const main = struct {
     /// Details panel - main region.
     /// Renders either:
     /// - mock panel trees (local test data), or
-    /// - plugin-driven subpanels (IPC schema: flex/grid/box nodes).
+    /// - plugin-driven panels (IPC schema: flex/grid/box nodes).
     pub fn render() !void {
         if (state.currentDetails()) |d| {
             if (d.source == .mock) {
@@ -71,7 +71,7 @@ pub const main = struct {
         dvui.label(@src(), "{s}", .{subtitle}, .{ .font = dvui.Font.theme(.body).larger(-3), .color_text = style.colors.text_muted, .id_extra = id_extra + 2000 });
     }
 
-    fn renderSubpanelItemsFlexContent(items: []const state.SubpanelItem, selected_index: usize, flat_index: *usize) void {
+    fn renderPanelItemsFlexContent(items: []const state.PanelItem, selected_index: usize, flat_index: *usize) void {
         // Flex selection uses a flat cursor across the whole (possibly nested) node tree.
         for (items) |item| {
             const i = flat_index.*;
@@ -82,10 +82,10 @@ pub const main = struct {
         }
     }
 
-    fn renderSubpanelItemsGridContent(node_id: usize, items: []const state.SubpanelItem, selected_index: usize, columns: usize, gap: usize, flat_index: *usize) void {
+    fn renderPanelItemsGridContent(node_id: usize, items: []const state.PanelItem, selected_index: usize, columns: usize, gap: usize, flat_index: *usize) void {
         const start = flat_index.*;
 
-        const Ctx = struct { items: []const state.SubpanelItem, selected: usize, start: usize };
+        const Ctx = struct { items: []const state.PanelItem, selected: usize, start: usize };
         const ctx: Ctx = .{ .items = items, .selected = selected_index, .start = start };
         const gap_f: f32 = @floatFromInt(gap);
 
@@ -106,7 +106,7 @@ pub const main = struct {
         flat_index.* += items.len;
     }
 
-    fn renderSubpanelNodeContent(node: state.ipc.PanelNodePayload, selected_index: usize, flat_index: *usize, node_serial: *usize) void {
+    fn renderPanelNodeContent(node: state.ipc.PanelNodePayload, selected_index: usize, flat_index: *usize, node_serial: *usize) void {
         // NOTE: The IPC schema uses stringly-typed node kinds for flexibility.
         // Keep parsing here local to the details panel to avoid leaking UI concerns into state.
         const node_id = node_serial.*;
@@ -125,7 +125,7 @@ pub const main = struct {
             defer box.deinit();
 
             for (node.children, 0..) |child, i| {
-                renderSubpanelNodeContent(child, selected_index, flat_index, node_serial);
+                renderPanelNodeContent(child, selected_index, flat_index, node_serial);
                 if (i + 1 < node.children.len and gap > 0) {
                     _ = dvui.spacer(@src(), .{ .min_size_content = if (is_horizontal) .{ .w = gap_f } else .{ .h = gap_f } });
                 }
@@ -136,12 +136,12 @@ pub const main = struct {
         if (std.mem.eql(u8, node.type, "grid")) {
             const cols: usize = node.columns orelse 2;
             const gap: usize = node.gap orelse 12;
-            renderSubpanelItemsGridContent(node_id, node.items, selected_index, cols, gap, flat_index);
+            renderPanelItemsGridContent(node_id, node.items, selected_index, cols, gap, flat_index);
             return;
         }
 
         if (std.mem.eql(u8, node.type, "flex")) {
-            renderSubpanelItemsFlexContent(node.items, selected_index, flat_index);
+            renderPanelItemsFlexContent(node.items, selected_index, flat_index);
         }
     }
 
@@ -194,7 +194,7 @@ pub const main = struct {
     }
 
     fn renderPluginDetails() !void {
-        const v = state.ipc.currentSubpanelView() orelse return;
+        const v = state.ipc.currentPanelView() orelse return;
 
         state.detailsClampSelection();
         const selected = if (state.currentDetails()) |d| d.selected_index else 0;
@@ -206,7 +206,7 @@ pub const main = struct {
 
         var flat_index: usize = 0;
         var node_serial: usize = 0;
-        renderSubpanelNodeContent(v.main, selected, &flat_index, &node_serial);
+        renderPanelNodeContent(v.main, selected, &flat_index, &node_serial);
     }
 };
 
@@ -242,8 +242,8 @@ pub const bottom = struct {
             }
         }
 
-        if (state.ipc.subpanel_pending) return "Loading…";
-        if (state.ipc.currentSubpanelView()) |v| return v.bottom_info orelse defaultHint();
+        if (state.ipc.panel_pending) return "Loading…";
+        if (state.ipc.currentPanelView()) |v| return v.bottom_info orelse defaultHint();
         return defaultHint();
     }
 };

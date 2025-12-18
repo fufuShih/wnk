@@ -1,6 +1,6 @@
 // ============================================
 // Todo Plugin
-// Session-only todo list rendered via subpanel box layout.
+// Session-only todo list rendered via panel tree layout.
 // - Select "Todo List" to open
 // - Type "todo <text>" then Enter to add
 // - In details, press `k` to open the actions overlay and toggle items
@@ -104,7 +104,7 @@ export function getResults(query: string): ResultItem[] {
   return list;
 }
 
-export function getSubpanel(itemId: string): JSX.Element | null {
+export function getPanel(itemId: string): JSX.Element | null {
   if (itemId.startsWith(ADD_PREFIX)) {
     addTodo(itemId.slice(ADD_PREFIX.length));
     return <TodoPanel />;
@@ -123,4 +123,3 @@ export function onCommand(name: string, text: string): JSX.Element | null {
 }
 
 export default TodoPanel;
-

@@ -34,8 +34,8 @@ src/
 ```
 
 ## IPC
-- Host spawns Bun via `plugin.BunProcess.spawn()` and sends `query`, `getSubpanel`, and `command`.
-- Incoming messages are handled in `state.handleBunMessage()` (results/subpanel/effects).
+- Host spawns Bun via `plugin.BunProcess.spawn()` and sends `query`, `getPanel`, and `command`.
+- Incoming messages are handled in `state.handleBunMessage()` (results/panel/effects).
 
 ## UI Conventions
 - Keep rendering state-driven (avoid hidden global UI state).

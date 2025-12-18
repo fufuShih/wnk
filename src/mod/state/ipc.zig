@@ -46,7 +46,7 @@ pub fn updatePluginResults(allocator: std.mem.Allocator, json_str: []const u8) !
     results_pending = false;
 }
 
-pub const SubpanelItem = struct {
+pub const PanelItem = struct {
     id: ?[]const u8 = null,
     title: []const u8,
     subtitle: []const u8,
@@ -155,7 +155,7 @@ pub const PanelNodePayload = struct {
     children: []PanelNodePayload = &.{},
 
     /// Used when `type == "flex"` or `type == "grid"`.
-    items: []SubpanelItem = &.{},
+    items: []PanelItem = &.{},
 };
 
 pub const PanelBottomPayload = struct {
@@ -164,7 +164,7 @@ pub const PanelBottomPayload = struct {
     text: ?[]const u8 = null,
 };
 
-pub const SubpanelPayload = struct {
+pub const PanelPayload = struct {
     type: []const u8,
     /// New structured schema.
     top: ?PanelTopPayload = null,
@@ -172,20 +172,20 @@ pub const SubpanelPayload = struct {
     bottom: ?PanelBottomPayload = null,
 };
 
-pub var subpanel_data: ?std.json.Parsed(SubpanelPayload) = null;
-pub var subpanel_pending: bool = false;
-pub var subpanel_json: ?[]u8 = null;
-pub var subpanel_json_allocator: ?std.mem.Allocator = null;
+pub var panel_data: ?std.json.Parsed(PanelPayload) = null;
+pub var panel_pending: bool = false;
+pub var panel_json: ?[]u8 = null;
+pub var panel_json_allocator: ?std.mem.Allocator = null;
 
-pub const SubpanelView = struct {
+pub const PanelView = struct {
     title: []const u8,
     subtitle: []const u8,
     bottom_info: ?[]const u8,
     main: PanelNodePayload,
 };
 
-pub fn currentSubpanelView() ?SubpanelView {
-    const parsed = subpanel_data orelse return null;
+pub fn currentPanelView() ?PanelView {
+    const parsed = panel_data orelse return null;
     const p = parsed.value;
 
     const title: []const u8 = if (p.top) |t|
@@ -213,10 +213,10 @@ pub fn currentSubpanelView() ?SubpanelView {
     };
 }
 
-pub fn subpanelItemsCount(node: PanelNodePayload) usize {
+pub fn panelItemsCount(node: PanelNodePayload) usize {
     if (std.mem.eql(u8, node.type, "box")) {
         var total: usize = 0;
-        for (node.children) |c| total += subpanelItemsCount(c);
+        for (node.children) |c| total += panelItemsCount(c);
         return total;
     }
 
@@ -229,13 +229,13 @@ pub fn subpanelItemsCount(node: PanelNodePayload) usize {
 }
 
 /// Returns the item at a given flat index within a PanelNode tree.
-/// This mirrors `subpanelItemsCount()` by traversing `box` children in order.
-pub fn subpanelItemAtIndex(node: PanelNodePayload, flat_index: usize) ?SubpanelItem {
+/// This mirrors `panelItemsCount()` by traversing `box` children in order.
+pub fn panelItemAtIndex(node: PanelNodePayload, flat_index: usize) ?PanelItem {
     if (std.mem.eql(u8, node.type, "box")) {
         var cursor = flat_index;
         for (node.children) |c| {
-            const count = subpanelItemsCount(c);
-            if (cursor < count) return subpanelItemAtIndex(c, cursor);
+            const count = panelItemsCount(c);
+            if (cursor < count) return panelItemAtIndex(c, cursor);
             cursor -= count;
         }
         return null;
@@ -249,27 +249,27 @@ pub fn subpanelItemAtIndex(node: PanelNodePayload, flat_index: usize) ?SubpanelI
     return node.items[flat_index];
 }
 
-pub fn updateSubpanelData(allocator: std.mem.Allocator, json_str: []const u8) !void {
+pub fn updatePanelData(allocator: std.mem.Allocator, json_str: []const u8) !void {
     const json_copy = try allocator.dupe(u8, json_str);
     errdefer allocator.free(json_copy);
 
-    var parsed = std.json.parseFromSlice(SubpanelPayload, allocator, json_copy, .{ .ignore_unknown_fields = true }) catch return;
+    var parsed = std.json.parseFromSlice(PanelPayload, allocator, json_copy, .{ .ignore_unknown_fields = true }) catch return;
     errdefer parsed.deinit();
 
-    if (!std.mem.eql(u8, parsed.value.type, "subpanel")) {
+    if (!std.mem.eql(u8, parsed.value.type, "panel")) {
         parsed.deinit();
         allocator.free(json_copy);
         return;
     }
 
-    if (subpanel_data) |*old| {
+    if (panel_data) |*old| {
         old.deinit();
     }
-    if (subpanel_json) |old_json| {
-        (subpanel_json_allocator orelse allocator).free(old_json);
+    if (panel_json) |old_json| {
+        (panel_json_allocator orelse allocator).free(old_json);
     }
-    subpanel_data = parsed;
-    subpanel_json = json_copy;
-    subpanel_json_allocator = allocator;
-    subpanel_pending = false;
+    panel_data = parsed;
+    panel_json = json_copy;
+    panel_json_allocator = allocator;
+    panel_pending = false;
 }

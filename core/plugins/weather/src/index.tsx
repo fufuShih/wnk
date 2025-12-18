@@ -1,15 +1,11 @@
 // ============================================
 // Weather Plugin
-// Provides weather results + a forecast subpanel
+// Provides weather results + a forecast panel
 // Uses Open-Meteo API (free, no API key required)
 // ============================================
 
-export type ResultItem = {
-  id?: string;
-  title: string;
-  subtitle?: string;
-  icon?: string;
-};
+import type { ResultItem } from '@wnk/sdk';
+import { Flex, GridItems, Item, Panel } from '@wnk/sdk';
 
 type WeatherData = {
   city: string;
@@ -88,6 +84,49 @@ async function updateWeatherCache(): Promise<void> {
   }
 }
 
+type WeatherPanelProps = {
+  weather: WeatherData | null;
+  forecast: ForecastDay[] | null;
+};
+
+function WeatherPanel(props: WeatherPanelProps): JSX.Element {
+  if (!props.weather || !props.forecast) {
+    return (
+      <Panel
+        top={{ type: 'header', title: 'Weather', subtitle: 'Unable to load weather data' }}
+        bottom={{ type: 'info', text: 'Status: offline' }}
+      >
+        <Flex>
+          <Item title="Offline" subtitle="No cached forecast available" />
+        </Flex>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel
+      top={{ type: 'header', title: 'Weather', subtitle: '7-day forecast' }}
+      bottom={{ type: 'info', text: 'Data: Open-Meteo · Cache: 10m' }}
+      dir="vertical"
+      gap={12}
+    >
+      <Flex>
+        <Item title={`${props.weather.city}  ${props.weather.temp}°C`} subtitle={props.weather.description} />
+      </Flex>
+
+      <GridItems columns={2} gap={12}>
+        {props.forecast.map((day) => (
+          <Item
+            key={day.date}
+            title={`${day.date}  ${day.temp_max}° / ${day.temp_min}°`}
+            subtitle={getWeatherDescription(day.weatherCode)}
+          />
+        ))}
+      </GridItems>
+    </Panel>
+  );
+}
+
 export async function getResults(_query: string): Promise<ResultItem[]> {
   // Always return weather data - filtering is done by Zig host
   return [
@@ -100,60 +139,12 @@ export async function getResults(_query: string): Promise<ResultItem[]> {
   ];
 }
 
-export type SubpanelItem = {
-  title: string;
-  subtitle: string;
-};
-
-export type PanelTop = { type: 'header'; title: string; subtitle?: string } | { type: 'selected' };
-export type PanelBottom = { type: 'none' } | { type: 'info'; text: string };
-
-export type PanelNode =
-  | { type: 'flex'; items: SubpanelItem[] }
-  | { type: 'grid'; columns?: number; gap?: number; items: SubpanelItem[] }
-  | { type: 'box'; dir?: 'vertical' | 'horizontal'; gap?: number; children: PanelNode[] };
-
-export type SubpanelData = {
-  top: PanelTop;
-  main: PanelNode;
-  bottom?: PanelBottom;
-};
-
-export async function getSubpanel(itemId: string): Promise<SubpanelData | null> {
+export async function getPanel(itemId: string): Promise<JSX.Element | null> {
   if (itemId !== 'weather') return null;
 
   await updateWeatherCache();
-
-  if (!cachedWeather || !cachedForecast) {
-    return {
-      top: { type: 'header', title: 'Weather', subtitle: 'Unable to load weather data' },
-      main: { type: 'flex', items: [] },
-      bottom: { type: 'info', text: 'Status: offline' },
-    };
-  }
-
-  const summary: PanelNode = {
-    type: 'flex',
-    items: [{ title: `${cachedWeather.city}  ${cachedWeather.temp}°C`, subtitle: cachedWeather.description }],
-  };
-
-  const items: SubpanelItem[] = cachedForecast.map((day) => ({
-    title: `${day.date}  ${day.temp_max}° / ${day.temp_min}°`,
-    subtitle: getWeatherDescription(day.weatherCode),
-  }));
-
-  return {
-    top: { type: 'header', title: 'Weather', subtitle: '7-day forecast' },
-    main: {
-      type: 'box',
-      dir: 'vertical',
-      gap: 12,
-      children: [summary, { type: 'grid', columns: 2, gap: 12, items }],
-    },
-    bottom: { type: 'info', text: 'Data: Open-Meteo · Cache: 10m' },
-  };
+  return <WeatherPanel weather={cachedWeather} forecast={cachedForecast} />;
 }
 
-export default function WeatherPlugin(): null {
-  return null;
-}
+export default WeatherPanel;
+
