@@ -162,32 +162,103 @@ fn handleCommandExecutionFrame() void {
     if (!state.command_execute) return;
     state.command_execute = false;
 
+    const handleHostCommand = struct {
+        fn run(name: []const u8, text: []const u8) bool {
+            if (std.mem.eql(u8, name, "setSearchText")) {
+                state.setSearchText(text);
+                state.focus_on_results = false;
+                state.resetPanels();
+                return true;
+            }
+            return false;
+        }
+    }.run;
+
+    // Top input mode: submit user text as the command payload.
+    if (state.action_prompt_active) {
+        const name = state.action_prompt_command_name[0..state.action_prompt_command_name_len];
+        const text = state.action_prompt_buffer[0..state.action_prompt_len];
+        if (name.len == 0) return;
+
+        if (state.action_prompt_host_only or bun_process == null) {
+            _ = handleHostCommand(name, text);
+        } else if (bun_process) |*proc| {
+            proc.sendCommand(name, text) catch |err| {
+                std.debug.print("Failed to send command: {}\n", .{err});
+            };
+        }
+
+        if (state.action_prompt_close_on_execute) {
+            state.action_prompt_active = false;
+            state.action_prompt_close_on_execute = true;
+            state.action_prompt_host_only = false;
+            state.action_prompt_command_name_len = 0;
+            state.action_prompt_title_len = 0;
+            state.action_prompt_placeholder_len = 0;
+            @memset(&state.action_prompt_buffer, 0);
+            state.action_prompt_len = 0;
+            dvui.focusWidget(null, null, null);
+        } else {
+            // Keep input mode open for repeated use (e.g., add multiple items).
+            @memset(&state.action_prompt_buffer, 0);
+            state.action_prompt_len = 0;
+        }
+        return;
+    }
+
     const cmd = actions.commandAt(state.command_selected_index);
     if (cmd) |command| {
         if (command.name.len == 0) return;
 
+        // Input action: switch the panel top into input mode (keep the overlay simple).
+        if (command.input) |inp| {
+            state.action_prompt_active = true;
+            state.action_prompt_close_on_execute = command.close_on_execute;
+            state.action_prompt_host_only = command.host_only;
+
+            const name_len = @min(command.name.len, state.action_prompt_command_name.len);
+            @memcpy(state.action_prompt_command_name[0..name_len], command.name[0..name_len]);
+            state.action_prompt_command_name_len = name_len;
+
+            const title_len = @min(command.title.len, state.action_prompt_title.len);
+            @memcpy(state.action_prompt_title[0..title_len], command.title[0..title_len]);
+            state.action_prompt_title_len = title_len;
+
+            const placeholder_len = @min(inp.placeholder.len, state.action_prompt_placeholder.len);
+            @memcpy(state.action_prompt_placeholder[0..placeholder_len], inp.placeholder[0..placeholder_len]);
+            state.action_prompt_placeholder_len = placeholder_len;
+
+            @memset(&state.action_prompt_buffer, 0);
+            const init_len = @min(inp.initial.len, state.action_prompt_buffer.len);
+            @memcpy(state.action_prompt_buffer[0..init_len], inp.initial[0..init_len]);
+            state.action_prompt_len = init_len;
+
+            // Close overlay immediately; user types in the top panel area.
+            if (state.nav.action_open) {
+                state.nav.action_open = false;
+                state.ipc.clearActionsData();
+                dvui.focusWidget(null, null, null);
+            }
+            return;
+        }
+
         const text_for_command = actions.commandPayload(command);
 
-        // Route action via Bun (command -> effect -> host state update).
-        if (bun_process) |*proc| {
+        // Route action either locally or via Bun.
+        if (command.host_only or bun_process == null) {
+            _ = handleHostCommand(command.name, text_for_command);
+        } else if (bun_process) |*proc| {
             proc.sendCommand(command.name, text_for_command) catch |err| {
                 std.debug.print("Failed to send command: {}\n", .{err});
             };
-        } else {
-            // Fallback if Bun isn't running.
-            if (std.mem.eql(u8, command.name, "setSearchText")) {
-                state.setSearchText(text_for_command);
-                state.focus_on_results = false;
-                state.resetPanels();
-            }
         }
-    }
 
-    // Close overlay after execution.
-    if (cmd != null and cmd.?.close_on_execute and state.nav.action_open) {
-        state.nav.action_open = false;
-        state.ipc.clearActionsData();
-        dvui.focusWidget(null, null, null);
+        // Close overlay after execution.
+        if (command.close_on_execute and state.nav.action_open) {
+            state.nav.action_open = false;
+            state.ipc.clearActionsData();
+            dvui.focusWidget(null, null, null);
+        }
     }
 }
 

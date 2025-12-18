@@ -1,15 +1,47 @@
 /// Details panel renderer (top/main/bottom).
 /// Kept in a single file to reduce file hopping while still enforcing region boundaries by API usage.
 pub const top = struct {
+    const dvui = @import("dvui");
     const state = @import("state");
 
     const regions = @import("../regions.zig");
+    const style = @import("../style.zig");
 
     /// Details panel - top region.
     /// Shows a navigation-style header that reflects the current details context.
     pub fn render() !void {
+        if (state.action_prompt_active) {
+            renderInputHeader();
+            return;
+        }
+
         const h = headerInfo();
         regions.top.renderNavHeader(h.title, h.subtitle);
+    }
+
+    fn renderInputHeader() void {
+        const title = state.action_prompt_title[0..state.action_prompt_title_len];
+        const placeholder = state.action_prompt_placeholder[0..state.action_prompt_placeholder_len];
+        const placeholder_text: []const u8 = if (placeholder.len > 0) placeholder else "Type and press Enter...";
+
+        var card = regions.top.beginCard(.{ .margin = style.layout.header_margin });
+        defer card.deinit();
+
+        regions.top.headerTitle(if (title.len > 0) title else "Input");
+        _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 8 } });
+
+        var te = dvui.textEntry(@src(), .{
+            .text = .{ .buffer = &state.action_prompt_buffer },
+            .placeholder = placeholder_text,
+        }, .{
+            .expand = .horizontal,
+            .font = dvui.Font.theme(.heading),
+            .color_fill = style.colors.surface,
+            .color_text = style.colors.text_primary,
+        });
+        state.action_prompt_len = te.len;
+        dvui.focusWidget(te.wd.id, null, null);
+        te.deinit();
     }
 
     fn headerInfo() struct { title: []const u8, subtitle: []const u8 } {
@@ -232,6 +264,8 @@ pub const bottom = struct {
     }
 
     fn textForDetails() ?[]const u8 {
+        if (state.action_prompt_active) return "Enter: submit  Esc: cancel";
+
         if (state.currentDetails()) |d| {
             if (d.source == .mock) {
                 const p = d.mock_panel orelse return null;

@@ -46,11 +46,26 @@ function parseActions(value: unknown): ActionItem[] | undefined {
     if (!name || !title) continue;
     const text = asString(v.text);
     const close_on_execute = typeof v.close_on_execute === 'boolean' ? v.close_on_execute : undefined;
+    const host_only = typeof v.host_only === 'boolean' ? v.host_only : undefined;
+
+    let input: { placeholder?: string; initial?: string } | undefined;
+    if (isObject(v.input)) {
+      const placeholder = asString(v.input.placeholder);
+      const initial = asString(v.input.initial);
+      if (placeholder !== undefined || initial !== undefined) {
+        input = {
+          ...(placeholder !== undefined ? { placeholder } : {}),
+          ...(initial !== undefined ? { initial } : {}),
+        };
+      }
+    }
     out.push({
       name,
       title,
       ...(text !== undefined ? { text } : {}),
       ...(close_on_execute !== undefined ? { close_on_execute } : {}),
+      ...(host_only !== undefined ? { host_only } : {}),
+      ...(input ? { input } : {}),
     });
   }
   return out;
@@ -63,7 +78,8 @@ function tryParseItem(node: SerializedNode): PanelItem | null {
   if (!title) return null;
   const subtitle = asString(node.props.subtitle) ?? '';
   const id = asString(node.props.id);
-  return id ? { id, title, subtitle } : { title, subtitle };
+  const has_actions = typeof (node.props as any).has_actions === 'boolean' ? ((node.props as any).has_actions as boolean) : undefined;
+  return id ? { id, title, subtitle, ...(has_actions !== undefined ? { has_actions } : {}) } : { title, subtitle, ...(has_actions !== undefined ? { has_actions } : {}) };
 }
 
 function readDisplay(style: unknown): string | undefined {

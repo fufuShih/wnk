@@ -1,6 +1,6 @@
-type Spacing = number | { x?: number; y?: number; top?: number; right?: number; bottom?: number; left?: number };
-
 import type { ActionItem, PanelBottom, PanelTop } from './ipc';
+
+type Spacing = number | { x?: number; y?: number; top?: number; right?: number; bottom?: number; left?: number };
 
 export interface Style {
   display?: 'flex' | 'grid';
@@ -60,6 +60,7 @@ export interface BoxProps extends BaseProps {
   id?: string;
   title?: string;
   subtitle?: string;
+  has_actions?: boolean;
 }
 export interface TextProps extends Omit<BaseProps, 'children'> { children?: string | number; bold?: boolean; italic?: boolean; }
 export interface ButtonProps extends Omit<BaseProps, 'children'> { children?: string; onPress: () => void; disabled?: boolean; variant?: 'primary' | 'secondary' | 'ghost'; }

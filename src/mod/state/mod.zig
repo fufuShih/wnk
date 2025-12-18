@@ -28,6 +28,14 @@ pub fn resetPanels() void {
     clearDetailsPluginId();
     clearDetailsItemId();
     ipc.clearActionsData();
+    action_prompt_active = false;
+    action_prompt_close_on_execute = true;
+    action_prompt_host_only = false;
+    action_prompt_command_name_len = 0;
+    action_prompt_title_len = 0;
+    action_prompt_placeholder_len = 0;
+    @memset(&action_prompt_buffer, 0);
+    action_prompt_len = 0;
 }
 
 pub fn currentPanel() Panel {
@@ -77,6 +85,23 @@ pub fn detailsSelectedNextPanel() ?*const mock.PanelData {
 // Action overlay selection/trigger
 pub var command_selected_index: usize = 0;
 pub var command_execute = false;
+
+// Action overlay prompt mode (optional input before executing a command)
+pub var action_prompt_active: bool = false;
+pub var action_prompt_close_on_execute: bool = true;
+pub var action_prompt_host_only: bool = false;
+
+pub var action_prompt_command_name: [128]u8 = undefined;
+pub var action_prompt_command_name_len: usize = 0;
+
+pub var action_prompt_title: [64]u8 = undefined;
+pub var action_prompt_title_len: usize = 0;
+
+pub var action_prompt_placeholder: [128]u8 = undefined;
+pub var action_prompt_placeholder_len: usize = 0;
+
+pub var action_prompt_buffer: [256]u8 = undefined;
+pub var action_prompt_len: usize = 0;
 
 // Selection state
 pub var selected_index: usize = 0;
@@ -172,6 +197,14 @@ pub fn init(allocator: std.mem.Allocator) void {
     resetPanels();
     command_selected_index = 0;
     command_execute = false;
+    action_prompt_active = false;
+    action_prompt_close_on_execute = true;
+    action_prompt_host_only = false;
+    action_prompt_command_name_len = 0;
+    action_prompt_title_len = 0;
+    action_prompt_placeholder_len = 0;
+    @memset(&action_prompt_buffer, 0);
+    action_prompt_len = 0;
 
     selected_item_title_len = 0;
     selected_item_subtitle_len = 0;

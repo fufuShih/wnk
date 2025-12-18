@@ -12,8 +12,9 @@ import { Box } from '@wnk/sdk';
 type Todo = { id: number; text: string; done: boolean };
 
 const ADD_PREFIX = 'add:';
-const CHECK_EMPTY = '\u2610'; // ☐
-const CHECK_DONE = '\u2611'; // ☑
+// Use ASCII markers to avoid missing glyphs in host fonts.
+const CHECK_EMPTY = '[ ]';
+const CHECK_DONE = '[x]';
 
 let nextId = 1;
 let todos: Todo[] = [
@@ -38,6 +39,12 @@ function addTodo(text: string): void {
   todos.push({ id: nextId++, text: t, done: false });
 }
 
+function deleteById(raw: string): void {
+  const id = Number.parseInt((raw ?? '').trim(), 10);
+  if (!Number.isFinite(id)) return;
+  todos = todos.filter((t) => t.id !== id);
+}
+
 function toggleById(raw: string): void {
   const id = Number.parseInt((raw ?? '').trim(), 10);
   if (!Number.isFinite(id)) return;
@@ -51,28 +58,22 @@ function TodoPanel(): JSX.Element {
   const done = todos.filter((t) => t.done).length;
   const pending = todos.length - done;
 
-  const actions: ActionItem[] = todos.map((t) => ({
-    name: 'todo.toggle',
-    title: `${t.done ? CHECK_DONE : CHECK_EMPTY} ${t.text}`,
-    text: String(t.id),
-    close_on_execute: false,
-  }));
-
   return (
     <Box
       top={{ type: 'header', title: 'Todo', subtitle: `${pending} pending \u00b7 ${done} done (session only)` }}
       bottom={{ type: 'info', text: 'W/S: move  Enter: open/actions  k: actions  Esc: back  |  Add: type "todo <text>"' }}
-      actions={actions}
       dir="vertical"
       gap={12}
     >
       <Box layout="flex">
+        <Box id="add" title="+ Add Todo" subtitle="Create a new item" has_actions />
         {todos.map((t) => (
           <Box
             key={t.id}
-            id={String(t.id)}
+            id={`todo:${t.id}`}
             title={`${t.done ? CHECK_DONE : CHECK_EMPTY} ${t.text}`}
             subtitle=""
+            has_actions
           />
         ))}
       </Box>
@@ -114,9 +115,50 @@ export function getPanel(itemId: string): JSX.Element | null {
   return null;
 }
 
+export function getActions(ctx: {
+  panel: 'search' | 'details';
+  pluginId: string;
+  itemId: string;
+  selectedId?: string;
+}): ActionItem[] {
+  if (ctx.panel !== 'details') return [];
+  if (ctx.itemId !== 'list') return [];
+
+  const selected = (ctx.selectedId ?? '').trim();
+  if (!selected) return [];
+
+  if (selected === 'add') {
+    return [
+      {
+        name: 'todo.add',
+        title: 'Add Todo',
+        input: { placeholder: 'Todo text...' },
+        close_on_execute: true,
+      },
+    ];
+  }
+
+  const m = selected.match(/^todo:(\d+)$/);
+  if (!m) return [];
+  const id = m[1];
+
+  return [
+    { name: 'todo.toggle', title: 'Toggle', text: id, close_on_execute: false },
+    { name: 'todo.delete', title: 'Delete', text: id, close_on_execute: true },
+  ];
+}
+
 export function onCommand(name: string, text: string): JSX.Element | null {
+  if (name === 'add') {
+    addTodo(text ?? '');
+    return <TodoPanel />;
+  }
   if (name === 'toggle') {
     toggleById(text ?? '');
+    return <TodoPanel />;
+  }
+  if (name === 'delete') {
+    deleteById(text ?? '');
     return <TodoPanel />;
   }
   return null;

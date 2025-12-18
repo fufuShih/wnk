@@ -9,6 +9,7 @@ export type PanelItem = {
   id?: string;
   title: string;
   subtitle: string;
+  has_actions?: boolean;
 };
 
 export type ActionItem = {
@@ -16,6 +17,8 @@ export type ActionItem = {
   title: string;
   text?: string;
   close_on_execute?: boolean;
+  host_only?: boolean;
+  input?: { placeholder?: string; initial?: string };
 };
 
 export type PanelTop =

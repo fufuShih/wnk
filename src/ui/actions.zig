@@ -3,6 +3,11 @@ const state = @import("state");
 
 const search = @import("search.zig");
 
+pub const CommandInput = struct {
+    placeholder: []const u8 = "",
+    initial: []const u8 = "",
+};
+
 pub const Command = struct {
     // Sent to Bun as { type: "command", name, text }
     name: []const u8,
@@ -10,10 +15,14 @@ pub const Command = struct {
     /// Optional payload string; sent as the command `text` field.
     text: ?[]const u8 = null,
     close_on_execute: bool = true,
+    /// Optional prompt input config; if set, the host will collect text before executing.
+    input: ?CommandInput = null,
+    /// Whether this command should be executed locally (host-only).
+    host_only: bool = false,
 };
 
 const default_commands = [_]Command{
-    .{ .name = "setSearchText", .title = "Use as query" },
+    .{ .name = "setSearchText", .title = "Use as query", .host_only = true },
 };
 
 var remote_commands: [64]Command = undefined;
@@ -37,7 +46,8 @@ pub fn isMainFocused() bool {
 /// This is equivalent to a `hasCommand` flag for the current selection.
 pub fn hasCommand() bool {
     if (!isMainFocused()) return false;
-    return commandTextOrNull() != null;
+    // Host commands need text; remote commands need plugin context.
+    return bunActionsContextOrNull() != null or commandTextOrNull() != null;
 }
 
 /// Whether the overlay can be opened *right now* (not already open).
@@ -50,11 +60,19 @@ pub fn openOverlay() void {
     if (!canOpenOverlay()) return;
     state.nav.action_open = true;
     state.command_selected_index = 0;
+    state.action_prompt_active = false;
+    state.action_prompt_close_on_execute = true;
+    state.action_prompt_host_only = false;
+    state.action_prompt_command_name_len = 0;
+    state.action_prompt_title_len = 0;
+    state.action_prompt_placeholder_len = 0;
+    @memset(&state.action_prompt_buffer, 0);
+    state.action_prompt_len = 0;
 
     // Always clear stale remote actions on open.
     state.ipc.clearActionsData();
 
-    // Request remote actions only when the focused selection belongs to a plugin.
+    // Request remote actions only when focused selection belongs to a plugin.
     if (bunActionsContextOrNull() != null) {
         state.ipc.queueActionsRequest();
     }
@@ -142,15 +160,13 @@ pub fn bunActionsContextOrNull() ?BunActionsContext {
 
     const item_id = if (state.getDetailsItemId().len > 0) state.getDetailsItemId() else state.getSelectedItemTitle();
 
-    var selected_id: []const u8 = "";
-    var selected_text: []const u8 = state.getSelectedItemTitle();
+    const v = state.ipc.currentPanelView() orelse return null;
+    const it = state.ipc.panelItemAtIndex(v.main, d.selected_index) orelse return null;
+    if (!(it.has_actions orelse false)) return null;
 
-    if (state.ipc.currentPanelView()) |v| {
-        if (state.ipc.panelItemAtIndex(v.main, d.selected_index)) |it| {
-            selected_id = it.id orelse it.title;
-            selected_text = it.title;
-        }
-    }
+    const selected_id: []const u8 = it.id orelse it.title;
+    const selected_text: []const u8 = it.title;
+    if (selected_text.len == 0) return null;
 
     return .{
         .panel = "details",
@@ -170,11 +186,17 @@ fn buildRemoteCommands() ?[]const Command {
     var i: usize = 0;
     while (i < n) : (i += 1) {
         const it = parsed.value.items[i];
+        const input: ?CommandInput = if (it.input) |inp| .{
+            .placeholder = inp.placeholder orelse "",
+            .initial = inp.initial orelse "",
+        } else null;
         remote_commands[i] = .{
             .name = it.name,
             .title = it.title,
             .text = it.text,
             .close_on_execute = it.close_on_execute orelse true,
+            .input = input,
+            .host_only = it.host_only orelse false,
         };
     }
     remote_commands_len = n;
@@ -218,6 +240,5 @@ fn selectedTextFromDetails() ?[]const u8 {
         }
     }
 
-    // Fallback to the stored root selection (e.g., while loading).
-    return state.getSelectedItemTitle();
+    return null;
 }

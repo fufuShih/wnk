@@ -26,7 +26,18 @@ pub fn handleEvents() !KeyboardResult {
             // - nested panels: pop
             // - root(search): hide to tray
             if (code == .escape) {
-                if (state.nav.action_open) {
+                if (state.action_prompt_active) {
+                    state.action_prompt_active = false;
+                    state.action_prompt_close_on_execute = true;
+                    state.action_prompt_host_only = false;
+                    state.action_prompt_command_name_len = 0;
+                    state.action_prompt_title_len = 0;
+                    state.action_prompt_placeholder_len = 0;
+                    @memset(&state.action_prompt_buffer, 0);
+                    state.action_prompt_len = 0;
+                    dvui.focusWidget(null, null, null);
+                    e.handled = true;
+                } else if (state.nav.action_open) {
                     state.nav.action_open = false;
                     dvui.focusWidget(null, null, null);
                     e.handled = true;
@@ -51,7 +62,10 @@ pub fn handleEvents() !KeyboardResult {
 
             // Enter behavior depends on current panel.
             if (code == .enter) {
-                if (state.nav.action_open) {
+                if (state.action_prompt_active) {
+                    state.command_execute = true;
+                    e.handled = true;
+                } else if (state.nav.action_open) {
                     state.command_execute = true;
                     e.handled = true;
                 } else {
@@ -102,7 +116,7 @@ pub fn handleEvents() !KeyboardResult {
             }
 
             // 'k' opens the floating action overlay when the main selection provides actions.
-            if (code == .k and actions.canOpenOverlay()) {
+            if (code == .k and !state.action_prompt_active and actions.canOpenOverlay()) {
                 actions.openOverlay();
                 e.handled = true;
             }
@@ -116,7 +130,7 @@ pub fn handleEvents() !KeyboardResult {
                         state.command_selected_index += 1;
                     }
                     e.handled = true;
-                } else if (state.currentPanel() == .details) {
+                } else if (state.currentPanel() == .details and !state.action_prompt_active) {
                     if (code == .w) state.detailsMoveSelection(-1) else state.detailsMoveSelection(1);
                     e.handled = true;
                 } else if (state.currentPanel() == .search and state.focus_on_results) {

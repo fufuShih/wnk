@@ -50,6 +50,9 @@ pub const PanelItem = struct {
     id: ?[]const u8 = null,
     title: []const u8,
     subtitle: []const u8,
+    /// Whether this item can open the action overlay.
+    /// When null, treated as false by the host.
+    has_actions: ?bool = null,
 };
 
 pub const ActionItem = struct {
@@ -59,6 +62,15 @@ pub const ActionItem = struct {
     text: ?[]const u8 = null,
     /// Optional behavior override; defaults to true in the host.
     close_on_execute: ?bool = null,
+    /// Optional host-only flag (execute locally without Bun).
+    host_only: ?bool = null,
+    /// Optional prompt input configuration (host-rendered before executing the command).
+    input: ?ActionInput = null,
+};
+
+pub const ActionInput = struct {
+    placeholder: ?[]const u8 = null,
+    initial: ?[]const u8 = null,
 };
 
 pub const ActionsPayload = struct {

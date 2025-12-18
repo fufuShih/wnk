@@ -33,7 +33,7 @@ pub fn renderMain(panel: state.Panel) !void {
     // Keep actual dvui focus aligned with the logical "main focused" state.
     const want_focus = switch (panel) {
         .search => state.focus_on_results,
-        .details => true,
+        .details => !state.action_prompt_active,
     };
     if (want_focus and dvui.focusedWidgetId() != main_box.wd.id) {
         dvui.focusWidget(main_box.wd.id, null, null);
@@ -64,6 +64,13 @@ fn renderActionOverlay() !void {
     // Defensive: if the context changed while open, close the overlay.
     if (!actions.hasCommand()) {
         state.nav.action_open = false;
+        state.action_prompt_active = false;
+        state.action_prompt_command_name_len = 0;
+        state.action_prompt_title_len = 0;
+        state.action_prompt_placeholder_len = 0;
+        @memset(&state.action_prompt_buffer, 0);
+        state.action_prompt_len = 0;
+        state.action_prompt_host_only = false;
         return;
     }
 
