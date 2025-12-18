@@ -53,9 +53,44 @@ export class wnkNode {
 
 export class wnkRoot {
   public child: wnkNode | null = null;
+  private rootChildren: wnkNode[] = [];
+  private syntheticRoot: wnkNode | null = null;
   private handlers = new Map<string, Map<string, (...args: unknown[]) => void>>();
 
-  setChild(node: wnkNode | null): void { this.child = node; }
+  setChild(node: wnkNode | null): void {
+    this.rootChildren = node ? [node] : [];
+    if (node) node.parent = null;
+    this.syntheticRoot = null;
+    this.child = node;
+  }
+
+  appendChildToContainer(child: wnkNode): void {
+    child.parent = null;
+    this.rootChildren.push(child);
+    this.rebuildContainerRoot();
+  }
+
+  insertChildInContainerBefore(child: wnkNode, beforeChild: wnkNode): void {
+    child.parent = null;
+    const idx = this.rootChildren.indexOf(beforeChild);
+    idx >= 0 ? this.rootChildren.splice(idx, 0, child) : this.rootChildren.push(child);
+    this.rebuildContainerRoot();
+  }
+
+  removeChildFromContainer(child: wnkNode): void {
+    const idx = this.rootChildren.indexOf(child);
+    if (idx >= 0) this.rootChildren.splice(idx, 1);
+    child.parent = null;
+    this.unregisterSubtree(child);
+    this.rebuildContainerRoot();
+  }
+
+  clearContainer(): void {
+    for (const c of this.rootChildren) this.unregisterSubtree(c);
+    this.rootChildren = [];
+    this.syntheticRoot = null;
+    this.child = null;
+  }
 
   registerHandler(nodeId: string, event: string, handler: (...args: unknown[]) => void): void {
     if (!this.handlers.has(nodeId)) this.handlers.set(nodeId, new Map());
@@ -69,6 +104,38 @@ export class wnkRoot {
   }
 
   serialize(): SerializedNode | null { return this.child?.serialize() ?? null; }
+
+  private rebuildContainerRoot(): void {
+    if (this.rootChildren.length === 0) {
+      this.child = null;
+      this.syntheticRoot = null;
+      return;
+    }
+
+    if (this.rootChildren.length === 1) {
+      const only = this.rootChildren[0];
+      only.parent = null;
+      this.child = only;
+      this.syntheticRoot = null;
+      return;
+    }
+
+    if (!this.syntheticRoot) this.syntheticRoot = new wnkNode('Box', {});
+    this.syntheticRoot.parent = null;
+    this.syntheticRoot.children = [];
+
+    for (const c of this.rootChildren) {
+      c.parent = this.syntheticRoot;
+      this.syntheticRoot.children.push(c);
+    }
+
+    this.child = this.syntheticRoot;
+  }
+
+  private unregisterSubtree(node: wnkNode): void {
+    this.unregisterHandlers(node.id);
+    for (const c of node.children) this.unregisterSubtree(c);
+  }
 }
 
 const TYPE_MAP: Record<string, ComponentType> = {

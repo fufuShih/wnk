@@ -3,7 +3,7 @@ import type { BoxProps, TextProps, ButtonProps, InputProps } from './types';
 
 export const wnk_COMPONENT = Symbol('wnk-component');
 
-const c = <P extends { style?: any; styles?: any },>(tag: string) => (props: P): React.ReactElement => {
+const c = <P,>(tag: string) => (props: P): React.ReactElement => {
   const { style, styles, ...rest } = props as any;
   const mergedStyle = styles ? { ...(style ?? {}), ...(styles ?? {}) } : style;
   return React.createElement(tag, { ...rest, style: mergedStyle, [wnk_COMPONENT]: true });

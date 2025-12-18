@@ -33,14 +33,11 @@ const hostConfig: ReactReconciler.HostConfig<
 
   appendInitialChild: (p, c) => p.appendChild(c),
   appendChild: (p, c) => p.appendChild(c),
-  appendChildToContainer: (c, child) => { c.setChild(child); onTreeUpdate?.(c); },
+  appendChildToContainer: (c, child) => { c.appendChildToContainer(child); onTreeUpdate?.(c); },
   insertBefore: (p, c, before) => p.insertBefore(c, before),
-  insertInContainerBefore: (c, child) => { c.setChild(child); onTreeUpdate?.(c); },
+  insertInContainerBefore: (c, child, before) => { c.insertChildInContainerBefore(child, before); onTreeUpdate?.(c); },
   removeChild: (p, c) => p.removeChild(c),
-  removeChildFromContainer: (c, child) => {
-    if (c.child === child) { c.unregisterHandlers(child.id); c.setChild(null); }
-    onTreeUpdate?.(c);
-  },
+  removeChildFromContainer: (c, child) => { c.removeChildFromContainer(child); onTreeUpdate?.(c); },
 
   prepareUpdate(_i, _t, oldP: Props, newP: Props): Props | null {
     const payload: Props = {};
@@ -72,7 +69,7 @@ const hostConfig: ReactReconciler.HostConfig<
   getChildHostContext: () => ({}),
   getPublicInstance: (i) => i,
   shouldSetTextContent: (_t, p) => isTextChild(p.children),
-  clearContainer: (c) => { if (c.child) c.unregisterHandlers(c.child.id); c.setChild(null); },
+  clearContainer: (c) => c.clearContainer(),
 
   supportsMutation: true,
   supportsPersistence: false,

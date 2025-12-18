@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
 import type { SerializedNode } from '../sdk/types';
 import type { ActionItem, PanelBottom, PanelNode, PanelTop, SubpanelData, SubpanelItem } from '../sdk/ipc';
+import { renderOnce } from './render-once';
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -209,3 +211,10 @@ export function subpanelFromSerializedRoot(
   };
 }
 
+export async function subpanelFromReactNode(
+  element: ReactNode,
+  defaults?: { title?: string; subtitle?: string }
+): Promise<RenderedSubpanel> {
+  const payload = await renderOnce(element);
+  return subpanelFromSerializedRoot(payload.root, defaults);
+}
