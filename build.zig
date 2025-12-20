@@ -31,9 +31,16 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const runtime_module = b.createModule(.{
+        .root_source_file = b.path("src/mod/runtime/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // tray module depends on SDL backend types
     tray_module.addImport("sdl-backend", dvui_dep.module("sdl3"));
+    // runtime module depends on plugin backend(s)
+    runtime_module.addImport("plugin", plugin_module);
 
     // Link system frameworks for macOS tray
     if (target.result.os.tag == .macos) {
@@ -47,6 +54,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("state", state_module);
     exe.root_module.addImport("tray", tray_module);
     exe.root_module.addImport("plugin", plugin_module);
+    exe.root_module.addImport("runtime", runtime_module);
 
     // Third party dependencies
     exe.root_module.addImport("dvui", dvui_dep.module("dvui_sdl3"));

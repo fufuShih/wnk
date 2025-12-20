@@ -4,7 +4,7 @@ const SDLBackend = @import("sdl-backend");
 
 // Import modules
 const state = @import("state");
-const plugin = @import("plugin");
+const runtime = @import("runtime");
 const tray = @import("tray");
 
 const keyboard = @import("ui/keyboard.zig");
@@ -17,8 +17,8 @@ var last_query_hash: u64 = 0;
 var last_query_change_ms: i64 = 0;
 var last_panel: state.Panel = state.default_panel;
 
-// Global plugin process and tray icon
-var bun_process: ?plugin.BunProcess = null;
+// Global runtime process and tray icon
+var runtime_host: runtime.RuntimeHost = .{};
 var tray_icon: ?tray.TrayIcon = null;
 var sdl_window_ptr: ?*SDLBackend.c.SDL_Window = null;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -87,13 +87,8 @@ pub fn AppInit(win: *dvui.Window) !void {
     // Initialize state
     state.init(allocator);
 
-    // Start Bun plugin process (calculator-only)
-    bun_process = plugin.BunProcess.spawn(allocator) catch |err| {
-        std.debug.print("Failed to start Bun process: {}\n", .{err});
-        return;
-    };
-
-    std.debug.print("Bun plugin process started\n", .{});
+    // Start plugin runtime process (default: Bun)
+    runtime_host.start(allocator, .bun);
 
     // Initialize system tray icon
     tray_icon = tray.TrayIcon.init(sdl_window) catch |err| {
@@ -112,11 +107,8 @@ pub fn AppDeinit() void {
         tray_icon = null;
     }
 
-    // Clean up plugin process
-    if (bun_process) |*proc| {
-        proc.deinit();
-        bun_process = null;
-    }
+    // Clean up runtime process
+    runtime_host.deinit();
     state.deinit();
 }
 
@@ -180,12 +172,10 @@ fn handleCommandExecutionFrame() void {
         const text = state.action_prompt_buffer[0..state.action_prompt_len];
         if (name.len == 0) return;
 
-        if (state.action_prompt_host_only or bun_process == null) {
+        if (state.action_prompt_host_only or !runtime_host.isActive()) {
             _ = handleHostCommand(name, text);
-        } else if (bun_process) |*proc| {
-            proc.sendCommand(name, text) catch |err| {
-                std.debug.print("Failed to send command: {}\n", .{err});
-            };
+        } else {
+            _ = runtime_host.sendCommand(name, text);
         }
 
         if (state.action_prompt_close_on_execute) {
@@ -245,12 +235,10 @@ fn handleCommandExecutionFrame() void {
         const text_for_command = actions.commandPayload(command);
 
         // Route action either locally or via Bun.
-        if (command.host_only or bun_process == null) {
+        if (command.host_only or !runtime_host.isActive()) {
             _ = handleHostCommand(command.name, text_for_command);
-        } else if (bun_process) |*proc| {
-            proc.sendCommand(command.name, text_for_command) catch |err| {
-                std.debug.print("Failed to send command: {}\n", .{err});
-            };
+        } else {
+            _ = runtime_host.sendCommand(command.name, text_for_command);
         }
 
         // Close overlay after execution.
@@ -276,37 +264,34 @@ fn sendActionsIfQueuedFrame() void {
     if (!state.ipc.actions_request_queued) return;
     state.ipc.actions_request_queued = false;
 
-    // Remote actions require a running Bun process and a plugin-owned selection context.
+    // Remote actions require a running runtime process and a plugin-owned selection context.
     const ctx = actions.bunActionsContextOrNull() orelse return;
-    if (bun_process) |*proc| {
-        const token = state.ipc.nextActionsToken();
-        state.ipc.actions_pending = true;
-        proc.sendGetActions(token, ctx.panel, ctx.plugin_id, ctx.item_id, ctx.selected_id, ctx.selected_text, ctx.query) catch |err| {
-            std.debug.print("Failed to request actions: {}\n", .{err});
-            state.ipc.actions_pending = false;
-        };
+    if (!runtime_host.isActive()) return;
+
+    const token = state.ipc.nextActionsToken();
+    state.ipc.actions_pending = true;
+    if (!runtime_host.sendGetActions(token, ctx.panel, ctx.plugin_id, ctx.item_id, ctx.selected_id, ctx.selected_text, ctx.query)) {
+        state.ipc.actions_pending = false;
     }
 }
 
 fn sendQueryIfChangedFrame() void {
-    if (bun_process) |*proc| {
-        const query = state.search_buffer[0..state.search_len];
-        const h = std.hash.Wyhash.hash(0, query);
-        const now_ms: i64 = std.time.milliTimestamp();
-        if (h != last_query_hash) {
-            last_query_hash = h;
-            last_query_change_ms = now_ms;
-            state.ipc.results_pending = true;
-        }
+    if (!runtime_host.isActive()) return;
 
-        // Debounce to avoid spamming Bun (especially for network-backed plugins).
-        const debounce_ms: i64 = 120;
-        if (state.ipc.results_pending and (now_ms - last_query_change_ms) >= debounce_ms) {
-            proc.sendQuery(query) catch |err| {
-                std.debug.print("Failed to send query: {}\n", .{err});
-            };
-            // Keep results_pending true until we receive a results message.
-        }
+    const query = state.search_buffer[0..state.search_len];
+    const h = std.hash.Wyhash.hash(0, query);
+    const now_ms: i64 = std.time.milliTimestamp();
+    if (h != last_query_hash) {
+        last_query_hash = h;
+        last_query_change_ms = now_ms;
+        state.ipc.results_pending = true;
+    }
+
+    // Debounce to avoid spamming the runtime (especially for network-backed plugins).
+    const debounce_ms: i64 = 120;
+    if (state.ipc.results_pending and (now_ms - last_query_change_ms) >= debounce_ms) {
+        _ = runtime_host.sendQuery(query);
+        // Keep results_pending true until we receive a results message.
     }
 }
 
@@ -332,12 +317,11 @@ fn enterDetailsPanelFrame() void {
             const item_id: []const u8 = item.id orelse item.title;
             state.setDetailsItemId(item_id);
             state.setSelectedItemInfo(item.title, item.subtitle orelse "");
-            if (bun_process) |*proc| {
+            if (runtime_host.isActive()) {
                 state.ipc.panel_pending = true;
-                proc.sendGetPanel(item.pluginId, item_id) catch |err| {
-                    std.debug.print("Failed to request panel: {}\n", .{err});
+                if (!runtime_host.sendGetPanel(item.pluginId, item_id)) {
                     state.ipc.panel_pending = false;
-                };
+                }
             }
         },
         // Defensive: plugin details but search selection isn't a plugin item.
@@ -364,28 +348,6 @@ fn handleDetailsPanelTransitionsFrame() void {
         leaveDetailsPanelFrame();
     }
     last_panel = now;
-}
-
-fn pollBunMessagesFrame() void {
-    if (bun_process) |*proc| {
-        while (true) {
-            const maybe_line = proc.pollLine() catch |err| {
-                if (err == plugin.IpcError.EndOfStream) {
-                    std.debug.print("Bun process closed its pipe; disabling plugins.\n", .{});
-                    proc.deinit();
-                    bun_process = null;
-                } else {
-                    std.debug.print("Failed to read from Bun: {}\n", .{err});
-                }
-                break;
-            };
-            if (maybe_line) |line| {
-                state.handleBunMessage(allocator, line);
-                continue;
-            }
-            break;
-        }
-    }
 }
 
 fn renderPanelsArea() !void {
@@ -420,7 +382,7 @@ pub fn AppFrame() !dvui.App.Result {
     handleDetailsPanelTransitionsFrame();
     try renderTopArea();
     sendQueryIfChangedFrame();
-    pollBunMessagesFrame();
+    runtime_host.pollMessages(allocator, state.handleBunMessage);
     try renderPanelsArea();
 
     return .ok;
