@@ -103,9 +103,6 @@ pub fn handleEvents() !KeyboardResult {
                                 const h = state.panelHeader(next_panel);
                                 state.setSelectedItemInfo(h.title, h.subtitle orelse "");
                                 state.openMockDetails(next_panel);
-                            } else {
-                                // If the item isn't navigable, fall back to actions (if available).
-                                actions.openOverlay();
                             }
                             state.command_selected_index = 0;
                             dvui.focusWidget(null, null, null);

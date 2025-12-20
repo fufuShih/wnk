@@ -105,6 +105,7 @@ const calendar_root_panel = PanelData{
         builder.listFromSpec("flex", &.{
             builder.item("Today", "Overview", null, null),
             builder.item("Upcoming", "Next 7 days", null, null),
+            builder.item("Object", "No actions", null, false),
         }),
     }),
     .bottom = builder.bottomInfo("Esc: back"),

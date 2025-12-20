@@ -226,14 +226,16 @@ fn selectedTextFromDetails() ?[]const u8 {
     state.detailsClampSelection();
 
     if (d.source == .mock) {
-        const p = d.mock_panel orelse return state.getSelectedItemTitle();
-        const it = state.ipc.panelItemAtIndex(p.main, d.selected_index) orelse return state.getSelectedItemTitle();
+        const p = d.mock_panel orelse return null;
+        const it = state.ipc.panelItemAtIndex(p.main, d.selected_index) orelse return null;
+        if (it.has_actions != null and !(it.has_actions orelse false)) return null;
         return it.title;
     }
 
     // Plugin details: prefer the selected IPC item (if loaded).
     if (state.ipc.currentPanelView()) |v| {
         if (state.ipc.panelItemAtIndex(v.main, d.selected_index)) |it| {
+            if (it.has_actions != null and !(it.has_actions orelse false)) return null;
             return it.title;
         }
     }
