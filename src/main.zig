@@ -112,10 +112,6 @@ pub fn AppDeinit() void {
     state.deinit();
 }
 
-fn currentPanel() state.Panel {
-    return state.currentPanel();
-}
-
 fn handleTrayFrame() ?dvui.App.Result {
     if (tray_icon) |*icon| {
         icon.checkTrayMessages();
@@ -142,12 +138,6 @@ fn handleKeyboardFrame() !?dvui.App.Result {
         return .ok;
     }
     return null;
-}
-
-fn renderTopArea() !void {
-    _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 20 } });
-
-    try panels.renderTop(currentPanel());
 }
 
 fn handleCommandExecutionFrame() void {
@@ -350,20 +340,6 @@ fn handleDetailsPanelTransitionsFrame() void {
     last_panel = now;
 }
 
-fn renderPanelsArea() !void {
-    _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 20 } });
-    _ = dvui.separator(@src(), .{ .expand = .horizontal, .margin = .{ .x = 20 } });
-    _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 10 } });
-
-    var over = dvui.overlay(@src(), .{ .expand = .both });
-    defer over.deinit();
-
-    try panels.renderMain(state.currentPanel());
-
-    panels.renderBottom(state.currentPanel());
-    try panels.renderOverlays();
-}
-
 // Executed every frame to draw UI
 pub fn AppFrame() !dvui.App.Result {
     if (handleTrayFrame()) |res| return res;
@@ -380,10 +356,10 @@ pub fn AppFrame() !dvui.App.Result {
     handleCommandExecutionFrame();
     sendActionsIfQueuedFrame();
     handleDetailsPanelTransitionsFrame();
-    try renderTopArea();
+    try panels.renderTopArea(state.currentPanel());
     sendQueryIfChangedFrame();
     runtime_host.pollMessages(allocator, state.handleBunMessage);
-    try renderPanelsArea();
+    try panels.renderPanelsArea(state.currentPanel());
 
     return .ok;
 }

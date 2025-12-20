@@ -17,6 +17,11 @@ pub fn renderTop(panel: state.Panel) !void {
     }
 }
 
+pub fn renderTopArea(panel: state.Panel) !void {
+    _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 20 } });
+    try renderTop(panel);
+}
+
 pub fn renderMain(panel: state.Panel) !void {
     const main_id_extra: usize = switch (panel) {
         .search => 10,
@@ -50,6 +55,19 @@ pub fn renderBottom(panel: state.Panel) void {
         .search => search_panel.bottom.render(),
         .details => details_panel.bottom.render(),
     }
+}
+
+pub fn renderPanelsArea(panel: state.Panel) !void {
+    _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 20 } });
+    _ = dvui.separator(@src(), .{ .expand = .horizontal, .margin = .{ .x = 20 } });
+    _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = 10 } });
+
+    var over = dvui.overlay(@src(), .{ .expand = .both });
+    defer over.deinit();
+
+    try renderMain(panel);
+    renderBottom(panel);
+    try renderOverlays();
 }
 
 /// Renders overlays that are not part of any panel region (e.g., action overlay).
