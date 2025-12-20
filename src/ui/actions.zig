@@ -227,10 +227,8 @@ fn selectedTextFromDetails() ?[]const u8 {
 
     if (d.source == .mock) {
         const p = d.mock_panel orelse return state.getSelectedItemTitle();
-        const list = state.panelList(p) orelse return state.getSelectedItemTitle();
-        if (list.items.len == 0) return null;
-        if (d.selected_index >= list.items.len) return null;
-        return list.items[d.selected_index].title;
+        const it = state.ipc.panelItemAtIndex(p.main, d.selected_index) orelse return state.getSelectedItemTitle();
+        return it.title;
     }
 
     // Plugin details: prefer the selected IPC item (if loaded).

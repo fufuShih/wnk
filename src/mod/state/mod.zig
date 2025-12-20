@@ -170,19 +170,15 @@ pub fn getDetailsItemId() []const u8 {
 
 pub const SearchResult = mock.SearchResult;
 pub const MockPanelData = mock.PanelData;
-pub const MockPanelItem = mock.PanelItem;
-pub const MockPanelLayout = mock.PanelLayout;
-pub const MockPanelMain = mock.PanelMain;
-pub const MockPanelTop = mock.PanelTop;
-pub const MockPanelBottom = mock.PanelBottom;
+pub const MockPanelHeader = mock.PanelHeader;
+pub const MockPanelLink = mock.PanelLink;
 pub const example_results = mock.example_results;
 
-pub fn panelHeader(p: *const mock.PanelData) mock.PanelTop.Header {
+pub fn panelHeader(p: *const mock.PanelData) mock.PanelHeader {
     return mock.panelHeader(p);
 }
-
-pub fn panelList(p: *const mock.PanelData) ?mock.PanelMain.List {
-    return mock.panelList(p);
+pub fn panelBottomInfo(p: *const mock.PanelData) ?[]const u8 {
+    return mock.panelBottomInfo(p);
 }
 
 pub fn init(allocator: std.mem.Allocator) void {

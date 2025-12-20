@@ -10,11 +10,22 @@ extern "kernel32" fn PeekNamedPipe(
     lpTotalBytesAvail: ?*u32,
     lpBytesLeftThisMessage: ?*u32,
 ) callconv(.winapi) windows.BOOL;
+extern "kernel32" fn GetLastError() callconv(.winapi) u32;
+
+const ERROR_BROKEN_PIPE: u32 = 109;
+const ERROR_NO_DATA: u32 = 232;
+const ERROR_PIPE_NOT_CONNECTED: u32 = 233;
 
 fn bytesAvailable(handle: windows.HANDLE) !u32 {
     var available: u32 = 0;
     const ok = PeekNamedPipe(handle, null, 0, null, &available, null);
-    if (ok == 0) return error.ReadFailed;
+    if (ok == 0) {
+        const err = GetLastError();
+        if (err == ERROR_BROKEN_PIPE or err == ERROR_PIPE_NOT_CONNECTED or err == ERROR_NO_DATA) {
+            return error.EndOfStream;
+        }
+        return error.ReadFailed;
+    }
     return available;
 }
 

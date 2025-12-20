@@ -164,10 +164,10 @@ pub const PanelNodePayload = struct {
 
     /// Used when `type == "box"`.
     dir: ?[]const u8 = null,
-    children: []PanelNodePayload = &.{},
+    children: []const PanelNodePayload = &.{},
 
     /// Used when `type == "flex"` or `type == "grid"`.
-    items: []PanelItem = &.{},
+    items: []const PanelItem = &.{},
 };
 
 pub const PanelBottomPayload = struct {

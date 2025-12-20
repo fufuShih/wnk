@@ -370,7 +370,13 @@ fn pollBunMessagesFrame() void {
     if (bun_process) |*proc| {
         while (true) {
             const maybe_line = proc.pollLine() catch |err| {
-                std.debug.print("Failed to read from Bun: {}\n", .{err});
+                if (err == plugin.IpcError.EndOfStream) {
+                    std.debug.print("Bun process closed its pipe; disabling plugins.\n", .{});
+                    proc.deinit();
+                    bun_process = null;
+                } else {
+                    std.debug.print("Failed to read from Bun: {}\n", .{err});
+                }
                 break;
             };
             if (maybe_line) |line| {

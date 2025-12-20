@@ -77,8 +77,7 @@ pub const Navigation = struct {
         const d = self.currentDetails() orelse return 0;
         if (d.source == .mock) {
             const p = d.mock_panel orelse return 0;
-            const list = mock.panelList(p) orelse return 0;
-            return list.items.len;
+            return ipc.panelItemsCount(p.main);
         }
 
         // plugin details: only selectable when data exists
@@ -112,9 +111,8 @@ pub const Navigation = struct {
         const d = self.currentDetails() orelse return null;
         if (d.source != .mock) return null;
         const p = d.mock_panel orelse return null;
-        const list = mock.panelList(p) orelse return null;
-        if (list.items.len == 0) return null;
-        if (d.selected_index >= list.items.len) return null;
-        return list.items[d.selected_index].next_panel;
+        const it = ipc.panelItemAtIndex(p.main, d.selected_index) orelse return null;
+        const item_id = it.id orelse it.title;
+        return mock.panelNextPanel(p, item_id);
     }
 };

@@ -44,6 +44,7 @@ const MSG = extern struct {
 };
 
 const WndProc = *const fn (hwnd: ?*anyopaque, msg: u32, wParam: usize, lParam: isize) callconv(.{ .x86_64_win = .{} }) isize;
+const HookProc = *const fn (nCode: i32, wParam: usize, lParam: isize) callconv(.{ .x86_64_win = .{} }) isize;
 
 const WNDCLASSEXW = extern struct {
     cbSize: u32,
@@ -58,6 +59,14 @@ const WNDCLASSEXW = extern struct {
     lpszMenuName: ?[*:0]const u16,
     lpszClassName: [*:0]const u16,
     hIconSm: ?*anyopaque,
+};
+
+const KBDLLHOOKSTRUCT = extern struct {
+    vkCode: u32,
+    scanCode: u32,
+    flags: u32,
+    time: u32,
+    dwExtraInfo: usize,
 };
 
 // Constants
@@ -76,6 +85,10 @@ const WM_CONTEXTMENU: u32 = 0x007B;
 const WM_NULL: u32 = 0x0000;
 const WM_CLOSE: u32 = 0x0010;
 const WM_HOTKEY: u32 = 0x0312;
+const WM_KEYDOWN: usize = 0x0100;
+const WM_KEYUP: usize = 0x0101;
+const WM_SYSKEYDOWN: usize = 0x0104;
+const WM_SYSKEYUP: usize = 0x0105;
 
 const MOD_ALT: u32 = 0x0001;
 const MOD_CONTROL: u32 = 0x0002;
@@ -83,6 +96,8 @@ const MOD_NOREPEAT: u32 = 0x4000;
 const VK_SPACE: u32 = 0x20;
 const HOTKEY_ID_SHOW: i32 = 1;
 const SW_RESTORE: i32 = 9;
+const WH_KEYBOARD_LL: i32 = 13;
+const LLKHF_ALTDOWN: u32 = 0x20;
 
 const TPM_BOTTOMALIGN: u32 = 0x0020;
 const TPM_LEFTALIGN: u32 = 0x0000;
@@ -99,6 +114,9 @@ const ID_TRAY_EXIT: usize = 1002;
 extern "user32" fn RegisterHotKey(hWnd: ?*anyopaque, id: i32, fsModifiers: u32, vk: u32) callconv(.{ .x86_64_win = .{} }) i32;
 extern "user32" fn UnregisterHotKey(hWnd: ?*anyopaque, id: i32) callconv(.{ .x86_64_win = .{} }) i32;
 extern "user32" fn ShowWindow(hWnd: ?*anyopaque, nCmdShow: i32) callconv(.{ .x86_64_win = .{} }) i32;
+extern "user32" fn SetWindowsHookExW(idHook: i32, lpfn: HookProc, hmod: ?*anyopaque, dwThreadId: u32) callconv(.{ .x86_64_win = .{} }) ?*anyopaque;
+extern "user32" fn UnhookWindowsHookEx(hhk: ?*anyopaque) callconv(.{ .x86_64_win = .{} }) i32;
+extern "user32" fn CallNextHookEx(hhk: ?*anyopaque, nCode: i32, wParam: usize, lParam: isize) callconv(.{ .x86_64_win = .{} }) isize;
 extern "shell32" fn Shell_NotifyIconW(dwMessage: u32, lpData: *NOTIFYICONDATAW) callconv(.{ .x86_64_win = .{} }) i32;
 extern "user32" fn LoadIconW(hInstance: ?*anyopaque, lpIconName: [*:0]const u16) callconv(.{ .x86_64_win = .{} }) ?*anyopaque;
 extern "user32" fn CreatePopupMenu() callconv(.{ .x86_64_win = .{} }) ?*anyopaque;
@@ -118,6 +136,8 @@ extern "kernel32" fn GetLastError() callconv(.{ .x86_64_win = .{} }) u32;
 // Global state
 var g_signals: signals.TraySignals = .{};
 var g_app_hwnd: ?*anyopaque = null;
+var g_hotkey_hook: ?*anyopaque = null;
+var g_alt_space_down: bool = false;
 
 pub const TrayIcon = struct {
     nid: NOTIFYICONDATAW,
@@ -171,6 +191,7 @@ pub const TrayIcon = struct {
         if (self.msg_hwnd) |hwnd| {
             _ = UnregisterHotKey(hwnd, HOTKEY_ID_SHOW);
         }
+        uninstallAltSpaceHook();
         _ = Shell_NotifyIconW(NIM_DELETE, &self.nid);
         if (self.msg_hwnd) |hwnd| {
             _ = DestroyWindow(hwnd);
@@ -295,9 +316,50 @@ fn createMessageOnlyWindow(hinstance: ?*anyopaque) !?*anyopaque {
 
 fn registerHotkey(hwnd: ?*anyopaque) void {
     if (RegisterHotKey(hwnd, HOTKEY_ID_SHOW, MOD_ALT | MOD_NOREPEAT, VK_SPACE) == 0) {
-        std.debug.print("Warning: Alt+Space failed (error: {}), trying Ctrl+Alt+Space\n", .{GetLastError()});
-        if (RegisterHotKey(hwnd, HOTKEY_ID_SHOW, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_SPACE) == 0) {
-            std.debug.print("Warning: Ctrl+Alt+Space also failed (error: {})\n", .{GetLastError()});
+        const err = GetLastError();
+        std.debug.print("Warning: Alt+Space failed (error: {}), installing hook\n", .{err});
+        if (!installAltSpaceHook()) {
+            std.debug.print("Warning: Alt+Space hook failed (error: {}), trying Ctrl+Alt+Space\n", .{GetLastError()});
+            if (RegisterHotKey(hwnd, HOTKEY_ID_SHOW, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_SPACE) == 0) {
+                std.debug.print("Warning: Ctrl+Alt+Space also failed (error: {})\n", .{GetLastError()});
+            }
         }
     }
+}
+
+fn installAltSpaceHook() bool {
+    if (g_hotkey_hook != null) return true;
+    const hinstance = GetModuleHandleW(null);
+    g_hotkey_hook = SetWindowsHookExW(WH_KEYBOARD_LL, lowLevelKeyboardProc, hinstance, 0);
+    return g_hotkey_hook != null;
+}
+
+fn uninstallAltSpaceHook() void {
+    if (g_hotkey_hook) |hook| {
+        _ = UnhookWindowsHookEx(hook);
+        g_hotkey_hook = null;
+    }
+    g_alt_space_down = false;
+}
+
+fn lowLevelKeyboardProc(nCode: i32, wParam: usize, lParam: isize) callconv(.{ .x86_64_win = .{} }) isize {
+    if (nCode >= 0) {
+        const is_keydown = wParam == WM_KEYDOWN or wParam == WM_SYSKEYDOWN;
+        const is_keyup = wParam == WM_KEYUP or wParam == WM_SYSKEYUP;
+        const info: *const KBDLLHOOKSTRUCT = @ptrFromInt(@as(usize, @bitCast(lParam)));
+
+        if (info.vkCode == VK_SPACE) {
+            if (is_keydown and (info.flags & LLKHF_ALTDOWN) != 0) {
+                if (!g_alt_space_down) {
+                    g_alt_space_down = true;
+                    requestShow();
+                    return 1;
+                }
+            } else if (is_keyup) {
+                g_alt_space_down = false;
+            }
+        }
+    }
+
+    return CallNextHookEx(g_hotkey_hook, nCode, wParam, lParam);
 }

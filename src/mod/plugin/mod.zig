@@ -8,6 +8,7 @@ const builtin = @import("builtin");
 pub const IpcError = error{
     ReadFailed,
     WriteFailed,
+    EndOfStream,
 };
 
 const platform = switch (builtin.os.tag) {
@@ -55,6 +56,7 @@ pub const BunProcess = struct {
     fn readAvailableIntoPending(self: *BunProcess) !void {
         platform.readAvailableIntoPending(self) catch |err| switch (err) {
             error.OutOfMemory => return err,
+            error.EndOfStream => return IpcError.EndOfStream,
             else => return IpcError.ReadFailed,
         };
     }

@@ -2,7 +2,8 @@ import { handleHostEvent, type HostEvent } from './lib';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createElement, Fragment, isValidElement, type ReactNode } from 'react';
 import type { ActionItem, PanelData, ResultItem as PluginResultItem } from './sdk/ipc';
-import { panelFromReactNode, type RenderedPanel } from './lib/panel';
+import type { RenderPayload, SerializedNode } from './sdk/types';
+import { panelFromReactNode, panelFromSerializedRoot, type RenderedPanel } from './lib/panel';
 import { loadPlugins, type LoadedPlugin } from './lib/load-plugins';
 
 declare const process: any;
@@ -18,6 +19,24 @@ function isPanelData(value: unknown): value is PanelData {
   return typeof value === 'object' && value !== null && !Array.isArray(value) && 'top' in value && 'main' in value;
 }
 
+function isSerializedNode(value: unknown): value is SerializedNode {
+  return typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as any).type === 'string' &&
+    (value as any).props !== null &&
+    typeof (value as any).props === 'object' &&
+    Array.isArray((value as any).children);
+}
+
+function isRenderPayload(value: unknown): value is RenderPayload {
+  return typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as any).version === 1 &&
+    'root' in (value as any);
+}
+
 function normalizePanelReactNode(node: ReactNode): ReactNode {
   if (Array.isArray(node)) return createElement('wnk-box', null, node);
   if (isValidElement(node) && node.type === Fragment) return createElement('wnk-box', null, node);
@@ -30,6 +49,8 @@ async function renderPanelOutput(
 ): Promise<RenderedPanel | null> {
   if (output === null || output === undefined) return null;
   if (isPanelData(output)) return { panel: output };
+  if (isRenderPayload(output)) return panelFromSerializedRoot(output.root, defaults);
+  if (isSerializedNode(output)) return panelFromSerializedRoot(output, defaults);
 
   let node: ReactNode;
   if (typeof output === 'function') {

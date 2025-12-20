@@ -81,14 +81,19 @@ pub const main = struct {
     /// - mock panel trees (local test data), or
     /// - plugin-driven panels (IPC schema: flex/grid/box nodes).
     pub fn render() !void {
-        if (state.currentDetails()) |d| {
-            if (d.source == .mock) {
-                try renderMockDetails(d);
-                return;
-            }
+        const d = state.currentDetails() orelse return;
+        state.detailsClampSelection();
+        const selected = d.selected_index;
+
+        if (d.source == .mock) {
+            const p = d.mock_panel orelse return;
+            try renderPanelDetails(p.main, selected);
+            return;
         }
 
-        try renderPluginDetails();
+        if (state.ipc.currentPanelView()) |v| {
+            try renderPanelDetails(v.main, selected);
+        }
     }
 
     fn renderTextItemCard(title: []const u8, subtitle: []const u8, id_extra: usize, is_selected: bool) void {
@@ -177,60 +182,7 @@ pub const main = struct {
         }
     }
 
-    fn renderMockItemsList(items: []const state.MockPanelItem, selected_index: usize) !void {
-        var scroll = dvui.scrollArea(@src(), .{}, .{
-            .expand = .both,
-        });
-        defer scroll.deinit();
-
-        for (items, 0..) |it, i| {
-            const id_extra: usize = 90_000 + i;
-            const is_selected = i == selected_index;
-            renderTextItemCard(it.title, it.subtitle, id_extra, is_selected);
-        }
-    }
-
-    fn renderMockItemsGrid(items: []const state.MockPanelItem, selected_index: usize, columns: usize, gap: usize) !void {
-        var scroll = dvui.scrollArea(@src(), .{}, .{
-            .expand = .both,
-        });
-        defer scroll.deinit();
-
-        const Ctx = struct { items: []const state.MockPanelItem, selected: usize };
-        const ctx: Ctx = .{ .items = items, .selected = selected_index };
-        const gap_f: f32 = @floatFromInt(gap);
-
-        regions.main.grid(Ctx, ctx, items.len, columns, gap_f, struct {
-            fn cell(c: Ctx, idx: usize, id_extra: usize) void {
-                const is_selected = idx == c.selected;
-                renderTextItemCard(c.items[idx].title, c.items[idx].subtitle, id_extra, is_selected);
-            }
-        }.cell);
-    }
-
-    fn renderMockDetails(d: *state.DetailsPanel) !void {
-        const p = d.mock_panel orelse return;
-        const list = state.panelList(p) orelse return;
-
-        state.detailsClampSelection();
-        const selected = d.selected_index;
-
-        if (list.layout) |l| {
-            if (std.mem.eql(u8, l.mode, "grid")) {
-                try renderMockItemsGrid(list.items, selected, l.columns orelse 2, l.gap orelse 12);
-                return;
-            }
-        }
-
-        try renderMockItemsList(list.items, selected);
-    }
-
-    fn renderPluginDetails() !void {
-        const v = state.ipc.currentPanelView() orelse return;
-
-        state.detailsClampSelection();
-        const selected = if (state.currentDetails()) |d| d.selected_index else 0;
-
+    fn renderPanelDetails(node: state.ipc.PanelNodePayload, selected_index: usize) !void {
         var scroll = dvui.scrollArea(@src(), .{}, .{
             .expand = .both,
         });
@@ -238,7 +190,7 @@ pub const main = struct {
 
         var flat_index: usize = 0;
         var node_serial: usize = 0;
-        renderPanelNodeContent(v.main, selected, &flat_index, &node_serial);
+        renderPanelNodeContent(node, selected_index, &flat_index, &node_serial);
     }
 };
 
@@ -269,15 +221,13 @@ pub const bottom = struct {
         if (state.currentDetails()) |d| {
             if (d.source == .mock) {
                 const p = d.mock_panel orelse return null;
-                return switch (p.bottom) {
-                    .none => defaultHint(),
-                    .info => |txt| txt,
-                };
+                return state.panelBottomInfo(p) orelse defaultHint();
             }
         }
 
-        if (state.ipc.panel_pending) return "Loading…";
+        if (state.ipc.panel_pending) return "Loading...";
         if (state.ipc.currentPanelView()) |v| return v.bottom_info orelse defaultHint();
         return defaultHint();
     }
 };
+

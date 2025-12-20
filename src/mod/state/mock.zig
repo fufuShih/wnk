@@ -1,55 +1,44 @@
-pub const PanelTop = union(enum) {
-    header: Header,
+const std = @import("std");
+const ipc = @import("ipc.zig");
+const builder = @import("panel_builder.zig");
 
-    pub const Header = struct {
-        title: []const u8,
-        subtitle: ?[]const u8 = null,
-    };
-};
-
-pub const PanelBottom = union(enum) {
-    none,
-    info: []const u8,
-};
-
-pub const PanelLayout = struct {
-    /// "flex" (default) or "grid"
-    mode: []const u8 = "flex",
-    columns: ?usize = null,
-    gap: ?usize = null,
-};
-
-pub const PanelMain = union(enum) {
-    list: List,
-
-    pub const List = struct {
-        layout: ?PanelLayout = null,
-        items: []const PanelItem = &.{},
-    };
+pub const PanelLink = struct {
+    id: []const u8,
+    next_panel: *const PanelData,
 };
 
 pub const PanelData = struct {
-    top: PanelTop,
-    main: PanelMain,
-    bottom: PanelBottom = .none,
+    top: ipc.PanelTopPayload,
+    main: ipc.PanelNodePayload,
+    bottom: ipc.PanelBottomPayload = .{},
+    links: []const PanelLink = &.{},
 };
 
-pub const PanelItem = struct {
+pub const PanelHeader = struct {
     title: []const u8,
-    subtitle: []const u8,
-    next_panel: ?*const PanelData = null,
+    subtitle: ?[]const u8 = null,
 };
 
-pub fn panelHeader(p: *const PanelData) PanelTop.Header {
-    return switch (p.top) {
-        .header => |h| h,
-    };
+pub fn panelHeader(p: *const PanelData) PanelHeader {
+    if (std.mem.eql(u8, p.top.type, "header")) {
+        return .{
+            .title = p.top.title orelse "",
+            .subtitle = p.top.subtitle,
+        };
+    }
+    return .{ .title = "", .subtitle = null };
 }
 
-pub fn panelList(p: *const PanelData) ?PanelMain.List {
-    return switch (p.main) {
-        .list => |l| l,
-    };
+pub fn panelBottomInfo(p: *const PanelData) ?[]const u8 {
+    if (std.mem.eql(u8, p.bottom.type, "info")) return p.bottom.text;
+    return null;
+}
+
+pub fn panelNextPanel(p: *const PanelData, item_id: []const u8) ?*const PanelData {
+    for (p.links) |link| {
+        if (std.mem.eql(u8, link.id, item_id)) return link.next_panel;
+    }
+    return null;
 }
 
 pub const SearchResult = struct {
@@ -71,54 +60,54 @@ pub const SearchResult = struct {
 // Deepest nodes first to allow pointers.
 
 const code_settings_panel = PanelData{
-    .top = .{ .header = .{ .title = "Code / Settings", .subtitle = "Common toggles" } },
-    .main = .{ .list = .{
-        .layout = .{ .mode = "flex" },
-        .items = &.{
-            .{ .title = "Toggle Vim Mode", .subtitle = "Editor" },
-            .{ .title = "Change Theme", .subtitle = "Appearance" },
-            .{ .title = "Open Keybindings", .subtitle = "Keyboard" },
-        },
-    } },
-    .bottom = .{ .info = "W/S: move  Esc: back" },
+    .top = builder.header("Code / Settings", "Common toggles"),
+    .main = builder.boxFromSpec("box vertical 12", &.{
+        builder.listFromSpec("flex", &.{
+            builder.item("Toggle Vim Mode", "Editor", null, null),
+            builder.item("Change Theme", "Appearance", null, null),
+            builder.item("Open Keybindings", "Keyboard", null, null),
+        }),
+    }),
+    .bottom = builder.bottomInfo("W/S: move  Esc: back"),
 };
 
 const code_recent_panel = PanelData{
-    .top = .{ .header = .{ .title = "Code / Recent", .subtitle = "Pick a project" } },
-    .main = .{ .list = .{
-        .layout = .{ .mode = "grid", .columns = 2, .gap = 12 },
-        .items = &.{
-            .{ .title = "wnk", .subtitle = "C:/workspace/projects/wnk" },
-            .{ .title = "notes", .subtitle = "C:/workspace/notes" },
-            .{ .title = "demo", .subtitle = "C:/workspace/demo" },
-            .{ .title = "playground", .subtitle = "C:/workspace/play" },
-        },
-    } },
-    .bottom = .{ .info = "Enter: open  Esc: back" },
+    .top = builder.header("Code / Recent", "Pick a project"),
+    .main = builder.boxFromSpec("box vertical 12", &.{
+        builder.listFromSpec("grid 2 12", &.{
+            builder.item("wnk", "C:/workspace/projects/wnk", null, null),
+            builder.item("notes", "C:/workspace/notes", null, null),
+            builder.item("demo", "C:/workspace/demo", null, null),
+            builder.item("playground", "C:/workspace/play", null, null),
+        }),
+    }),
+    .bottom = builder.bottomInfo("Enter: open  Esc: back"),
 };
 
 const code_root_panel = PanelData{
-    .top = .{ .header = .{ .title = "Code", .subtitle = "Development" } },
-    .main = .{ .list = .{
-        .layout = .{ .mode = "flex" },
-        .items = &.{
-            .{ .title = "Recent", .subtitle = "Projects", .next_panel = &code_recent_panel },
-            .{ .title = "Settings", .subtitle = "Preferences", .next_panel = &code_settings_panel },
-        },
-    } },
-    .bottom = .{ .info = "Enter: open  Esc: back" },
+    .top = builder.header("Code", "Development"),
+    .main = builder.boxFromSpec("box vertical 12", &.{
+        builder.listFromSpec("flex", &.{
+            builder.item("Recent", "Projects", "recent", null),
+            builder.item("Settings", "Preferences", "settings", null),
+        }),
+    }),
+    .links = &.{
+        .{ .id = "recent", .next_panel = &code_recent_panel },
+        .{ .id = "settings", .next_panel = &code_settings_panel },
+    },
+    .bottom = builder.bottomInfo("Enter: open  Esc: back"),
 };
 
 const calendar_root_panel = PanelData{
-    .top = .{ .header = .{ .title = "Calendar", .subtitle = "System Preferences" } },
-    .main = .{ .list = .{
-        .layout = .{ .mode = "flex" },
-        .items = &.{
-            .{ .title = "Today", .subtitle = "Overview" },
-            .{ .title = "Upcoming", .subtitle = "Next 7 days" },
-        },
-    } },
-    .bottom = .{ .info = "Esc: back" },
+    .top = builder.header("Calendar", "System Preferences"),
+    .main = builder.boxFromSpec("box vertical 12", &.{
+        builder.listFromSpec("flex", &.{
+            builder.item("Today", "Overview", null, null),
+            builder.item("Upcoming", "Next 7 days", null, null),
+        }),
+    }),
+    .bottom = builder.bottomInfo("Esc: back"),
 };
 
 /// Minimal example dataset for local UI testing.
