@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@wnk/core",
+      "name": "@wnk/runtime-bun",
       "dependencies": {
         "react": "^18.2.0",
         "react-reconciler": "^0.29.0",

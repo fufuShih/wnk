@@ -1,5 +1,5 @@
 {
-  "name": "@wnk/core",
+  "name": "@wnk/runtime-bun",
   "version": "0.1.0",
   "type": "module",
   "scripts": {

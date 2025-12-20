@@ -4,13 +4,13 @@
 
 Launcher-style app with:
 - Zig host UI (`dvui` + SDL3 backend) in `src/`
-- Bun/TypeScript runtime (plugins + IPC) in `core/`
+- Bun/TypeScript runtime (plugins + IPC) in `runtime-bun/`
 
 ## Quick Commands
 - Build: `zig build`
 - Run: `zig build run`
 - Test: `zig build test`
-- Rebuild plugin bundles: `cd core; bun run build:plugins`
+- Rebuild plugin bundles: `cd runtime-bun; bun run build:plugins`
 
 ## IPC Protocol (Host <-> Bun)
 Messages are newline-delimited JSON over stdin/stdout.
@@ -28,5 +28,5 @@ Bun -> Host
 - `{ "type": "effect", "name": "...", "text": "..." }`
 
 ## Notes
-- The Bun runtime imports built plugin bundles from `core/plugins/*/dist/`; update TS sources then run `bun run build:plugins`.
+- The Bun runtime imports built plugin bundles from `runtime-bun/plugins/*/dist/`; update TS sources then run `bun run build:plugins`.
 - The Zig host uses platform-specific non-blocking pipe reads (`PeekNamedPipe` on Windows, `poll` on POSIX).

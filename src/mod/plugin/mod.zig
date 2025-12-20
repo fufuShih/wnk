@@ -28,7 +28,7 @@ pub const BunProcess = struct {
     pending_buffer: std.ArrayListUnmanaged(u8),
 
     pub fn spawn(allocator: std.mem.Allocator) !BunProcess {
-        const argv = [_][]const u8{ "bun", "run", "core/runtime.tsx" };
+        const argv = [_][]const u8{ "bun", "run", "runtime-bun/runtime.tsx" };
 
         var child = std.process.Child.init(&argv, allocator);
         child.stdin_behavior = .Pipe;
