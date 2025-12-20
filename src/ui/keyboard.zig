@@ -43,8 +43,10 @@ pub fn handleEvents() !KeyboardResult {
                     e.handled = true;
                 } else if (state.canPopPanel()) {
                     state.popPanel();
-                    // Returning to the root/search panel should start in the search input.
-                    state.focus_on_results = false;
+                    // Returning to the root/search panel should focus the main list.
+                    if (state.currentPanel() == .search) {
+                        state.focus_on_results = true;
+                    }
                     dvui.focusWidget(null, null, null);
                     e.handled = true;
                 } else {
