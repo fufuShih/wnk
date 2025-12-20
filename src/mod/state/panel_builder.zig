@@ -45,14 +45,16 @@ pub fn listFromSpec(spec: []const u8, items: []const ipc.PanelItem) ipc.PanelNod
     const layout = parseLayoutSpec(spec);
     if (layout.kind == .grid) {
         return .{
-            .type = "grid",
+            .type = "box",
+            .layout = "grid",
             .columns = layout.columns,
             .gap = layout.gap,
             .items = items,
         };
     }
     return .{
-        .type = "flex",
+        .type = "box",
+        .layout = "flex",
         .items = items,
     };
 }
@@ -61,6 +63,12 @@ pub fn boxFromSpec(spec: []const u8, children: []const ipc.PanelNodePayload) ipc
     const layout = parseLayoutSpec(spec);
     return .{
         .type = "box",
+        .layout = switch (layout.kind) {
+            .grid => "grid",
+            .flex => "flex",
+            .box => null,
+        },
+        .columns = layout.columns,
         .dir = layout.dir,
         .gap = layout.gap,
         .children = children,
@@ -82,22 +90,32 @@ fn parseLayoutSpec(spec: []const u8) LayoutSpec {
         return out;
     }
 
+    if (std.mem.eql(u8, first, "flex")) {
+        var out: LayoutSpec = .{ .kind = .flex };
+        parseDirAndGap(&it, &out);
+        return out;
+    }
+
     if (std.mem.eql(u8, first, "box")) {
         var out: LayoutSpec = .{ .kind = .box };
-        if (it.next()) |tok| {
-            if (std.mem.eql(u8, tok, "horizontal") or std.mem.eql(u8, tok, "vertical")) {
-                out.dir = tok;
-            } else {
-                out.gap = parseOptionalUsize(tok);
-            }
-        }
-        if (it.next()) |tok| {
-            out.gap = parseOptionalUsize(tok) orelse out.gap;
-        }
+        parseDirAndGap(&it, &out);
         return out;
     }
 
     return .{ .kind = .flex };
+}
+
+fn parseDirAndGap(it: anytype, out: *LayoutSpec) void {
+    if (it.next()) |tok| {
+        if (std.mem.eql(u8, tok, "horizontal") or std.mem.eql(u8, tok, "vertical")) {
+            out.dir = tok;
+        } else {
+            out.gap = parseOptionalUsize(tok);
+        }
+    }
+    if (it.next()) |tok| {
+        out.gap = parseOptionalUsize(tok) orelse out.gap;
+    }
 }
 
 fn parseOptionalUsize(value: []const u8) ?usize {

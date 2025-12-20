@@ -119,11 +119,19 @@ function readLayout(props: Record<string, unknown>): string | undefined {
   return asString(props.layout) ?? readDisplay(props.style);
 }
 
+function normalizeLayout(value: string | undefined): 'flex' | 'grid' | undefined {
+  return value === 'flex' || value === 'grid' ? value : undefined;
+}
+
 function toPanelNode(node: SerializedNode): PanelNode | null {
   if (node.type !== 'Box') return null;
 
   const props = node.props ?? {};
   const children = node.children ?? [];
+  const layout = normalizeLayout(readLayout(props));
+  const dir = readDir(props);
+  const gap = readGap(props);
+  const columns = asFiniteNumber(props.columns) ?? readGridColumns(props.style);
 
   const items: PanelItem[] = [];
   let allChildrenAreItems = children.length > 0;
@@ -136,28 +144,24 @@ function toPanelNode(node: SerializedNode): PanelNode | null {
     items.push(it);
   }
 
-  const layout = readLayout(props);
-  const isGrid = layout === 'grid';
-
   if (allChildrenAreItems) {
-    if (isGrid) {
-      const columns = asFiniteNumber(props.columns) ?? readGridColumns(props.style);
-      const gap = asFiniteNumber(props.gap) ?? readGridGap(props.style);
-      return {
-        type: 'grid',
-        ...(columns !== undefined ? { columns } : {}),
-        ...(gap !== undefined ? { gap } : {}),
-        items,
-      };
-    }
-    return { type: 'flex', items };
+    const nodeLayout = layout ?? 'flex';
+    return {
+      type: 'box',
+      ...(nodeLayout ? { layout: nodeLayout } : {}),
+      ...(dir !== undefined ? { dir } : {}),
+      ...(gap !== undefined ? { gap } : {}),
+      ...(columns !== undefined ? { columns } : {}),
+      items,
+      children: [],
+    };
   }
 
   const outChildren: PanelNode[] = [];
   let pending: PanelItem[] = [];
   const flush = (): void => {
     if (pending.length === 0) return;
-    outChildren.push({ type: 'flex', items: pending });
+    outChildren.push({ type: 'box', layout: 'flex', items: pending, children: [] });
     pending = [];
   };
 
@@ -173,12 +177,12 @@ function toPanelNode(node: SerializedNode): PanelNode | null {
   }
   flush();
 
-  const dir = readDir(props);
-  const gap = readGap(props);
   return {
     type: 'box',
+    ...(layout !== undefined ? { layout } : {}),
     ...(dir !== undefined ? { dir } : {}),
     ...(gap !== undefined ? { gap } : {}),
+    ...(columns !== undefined ? { columns } : {}),
     children: outChildren,
   };
 }
@@ -202,7 +206,7 @@ export function panelFromSerializedRoot(
     return {
       panel: {
         top: fallbackTop,
-        main: { type: 'flex', items: [] },
+        main: { type: 'box', layout: 'flex', items: [], children: [] },
         bottom: { type: 'none' },
       },
     };
@@ -220,7 +224,7 @@ export function panelFromSerializedRoot(
 
   const actions = parseActions(root.props.actions);
 
-  const main = toPanelNode(root) ?? { type: 'flex', items: [] };
+  const main = toPanelNode(root) ?? { type: 'box', layout: 'flex', items: [], children: [] };
 
   return {
     panel: { top, main, bottom },

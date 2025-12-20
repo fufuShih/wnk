@@ -30,9 +30,18 @@ export type PanelBottom =
   | { type: 'info'; text: string };
 
 export type PanelNode =
+  | {
+      type: 'box';
+      layout?: 'flex' | 'grid';
+      dir?: 'vertical' | 'horizontal';
+      gap?: number;
+      columns?: number;
+      items?: PanelItem[];
+      children?: PanelNode[];
+    }
+  // Legacy node kinds (still accepted by the host).
   | { type: 'flex'; items: PanelItem[] }
-  | { type: 'grid'; columns?: number; gap?: number; items: PanelItem[] }
-  | { type: 'box'; dir?: 'vertical' | 'horizontal'; gap?: number; children: PanelNode[] };
+  | { type: 'grid'; columns?: number; gap?: number; items: PanelItem[] };
 
 export type PanelData = {
   top: PanelTop;

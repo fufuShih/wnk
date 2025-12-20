@@ -154,10 +154,13 @@ pub const PanelTopPayload = struct {
 };
 
 pub const PanelNodePayload = struct {
-    /// "flex", "grid", or "box"
-    type: []const u8 = "flex",
+    /// "box" (preferred), or legacy "flex"/"grid"
+    type: []const u8 = "box",
 
-    /// Used when `type == "grid"`.
+    /// Layout hint for box nodes ("flex" or "grid").
+    layout: ?[]const u8 = null,
+
+    /// Used when `layout == "grid"` (or legacy `type == "grid"`).
     columns: ?usize = null,
     /// Grid cell gap, or child spacing when `type == "box"`.
     gap: ?usize = null,
@@ -166,7 +169,7 @@ pub const PanelNodePayload = struct {
     dir: ?[]const u8 = null,
     children: []const PanelNodePayload = &.{},
 
-    /// Used when `type == "flex"` or `type == "grid"`.
+    /// Selectable leaf items (valid for any layout).
     items: []const PanelItem = &.{},
 };
 
@@ -226,39 +229,27 @@ pub fn currentPanelView() ?PanelView {
 }
 
 pub fn panelItemsCount(node: PanelNodePayload) usize {
-    if (std.mem.eql(u8, node.type, "box")) {
-        var total: usize = 0;
-        for (node.children) |c| total += panelItemsCount(c);
-        return total;
-    }
-
-    if (std.mem.eql(u8, node.type, "flex") or std.mem.eql(u8, node.type, "grid")) {
-        return node.items.len;
-    }
-
-    // Unsupported node kinds are treated as empty to avoid selection mismatch.
-    return 0;
+    if (node.items.len > 0) return node.items.len;
+    var total: usize = 0;
+    for (node.children) |c| total += panelItemsCount(c);
+    return total;
 }
 
 /// Returns the item at a given flat index within a PanelNode tree.
 /// This mirrors `panelItemsCount()` by traversing `box` children in order.
 pub fn panelItemAtIndex(node: PanelNodePayload, flat_index: usize) ?PanelItem {
-    if (std.mem.eql(u8, node.type, "box")) {
-        var cursor = flat_index;
-        for (node.children) |c| {
-            const count = panelItemsCount(c);
-            if (cursor < count) return panelItemAtIndex(c, cursor);
-            cursor -= count;
-        }
-        return null;
+    if (node.items.len > 0) {
+        if (flat_index >= node.items.len) return null;
+        return node.items[flat_index];
     }
 
-    if (!(std.mem.eql(u8, node.type, "flex") or std.mem.eql(u8, node.type, "grid"))) {
-        return null;
+    var cursor = flat_index;
+    for (node.children) |c| {
+        const count = panelItemsCount(c);
+        if (cursor < count) return panelItemAtIndex(c, cursor);
+        cursor -= count;
     }
-
-    if (flat_index >= node.items.len) return null;
-    return node.items[flat_index];
+    return null;
 }
 
 pub fn updatePanelData(allocator: std.mem.Allocator, json_str: []const u8) !void {

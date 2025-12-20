@@ -79,7 +79,7 @@ pub const main = struct {
     /// Details panel - main region.
     /// Renders either:
     /// - mock panel trees (local test data), or
-    /// - plugin-driven panels (IPC schema: flex/grid/box nodes).
+    /// - plugin-driven panels (IPC schema: box nodes with layout hints).
     pub fn render() !void {
         const d = state.currentDetails() orelse return;
         state.detailsClampSelection();
@@ -143,42 +143,94 @@ pub const main = struct {
         flat_index.* += items.len;
     }
 
+    fn nodeLayout(node: state.ipc.PanelNodePayload) []const u8 {
+        if (node.layout) |l| return l;
+        return node.type;
+    }
+
+    fn renderPanelChildrenGridContent(
+        node_id: usize,
+        children: []const state.ipc.PanelNodePayload,
+        selected_index: usize,
+        columns: usize,
+        gap: usize,
+        flat_index: *usize,
+        node_serial: *usize,
+    ) void {
+        const start = flat_index.*;
+        var total: usize = 0;
+        for (children) |child| total += state.ipc.panelItemsCount(child);
+
+        const Ctx = struct {
+            children: []const state.ipc.PanelNodePayload,
+            selected: usize,
+            start: usize,
+            node_serial: *usize,
+        };
+        const ctx: Ctx = .{ .children = children, .selected = selected_index, .start = start, .node_serial = node_serial };
+        const gap_f: f32 = @floatFromInt(gap);
+
+        // Wrap each grid with a unique parent to avoid dvui ID collisions across sections.
+        var grid_box = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .id_extra = 40_000 + node_id });
+        defer grid_box.deinit();
+
+        regions.main.grid(Ctx, ctx, children.len, columns, gap_f, struct {
+            fn cell(c: Ctx, idx: usize, _id_extra: usize) void {
+                _ = _id_extra;
+                var offset: usize = 0;
+                var i: usize = 0;
+                while (i < idx) : (i += 1) {
+                    offset += state.ipc.panelItemsCount(c.children[i]);
+                }
+
+                var local_flat: usize = c.start + offset;
+                renderPanelNodeContent(c.children[idx], c.selected, &local_flat, c.node_serial);
+            }
+        }.cell);
+
+        flat_index.* = start + total;
+    }
+
     fn renderPanelNodeContent(node: state.ipc.PanelNodePayload, selected_index: usize, flat_index: *usize, node_serial: *usize) void {
         // NOTE: The IPC schema uses stringly-typed node kinds for flexibility.
         // Keep parsing here local to the details panel to avoid leaking UI concerns into state.
         const node_id = node_serial.*;
         node_serial.* += 1;
 
-        if (std.mem.eql(u8, node.type, "box")) {
-            const is_horizontal = if (node.dir) |d| std.mem.eql(u8, d, "horizontal") else false;
+        const layout = nodeLayout(node);
+        const is_grid = std.mem.eql(u8, layout, "grid");
 
+        if (is_grid) {
+            const cols: usize = node.columns orelse 2;
             const gap: usize = node.gap orelse 12;
-            const gap_f: f32 = @floatFromInt(gap);
-
-            var box = dvui.box(@src(), .{ .dir = if (is_horizontal) .horizontal else .vertical }, .{
-                .expand = .horizontal,
-                .id_extra = 80_000 + node_id,
-            });
-            defer box.deinit();
-
-            for (node.children, 0..) |child, i| {
-                renderPanelNodeContent(child, selected_index, flat_index, node_serial);
-                if (i + 1 < node.children.len and gap > 0) {
-                    _ = dvui.spacer(@src(), .{ .min_size_content = if (is_horizontal) .{ .w = gap_f } else .{ .h = gap_f } });
-                }
+            if (node.items.len > 0) {
+                renderPanelItemsGridContent(node_id, node.items, selected_index, cols, gap, flat_index);
+            } else {
+                renderPanelChildrenGridContent(node_id, node.children, selected_index, cols, gap, flat_index, node_serial);
             }
             return;
         }
 
-        if (std.mem.eql(u8, node.type, "grid")) {
-            const cols: usize = node.columns orelse 2;
-            const gap: usize = node.gap orelse 12;
-            renderPanelItemsGridContent(node_id, node.items, selected_index, cols, gap, flat_index);
+        if (node.items.len > 0) {
+            renderPanelItemsFlexContent(node.items, selected_index, flat_index);
             return;
         }
 
-        if (std.mem.eql(u8, node.type, "flex")) {
-            renderPanelItemsFlexContent(node.items, selected_index, flat_index);
+        const is_horizontal = if (node.dir) |d| std.mem.eql(u8, d, "horizontal") else false;
+        const gap: usize = node.gap orelse 12;
+        const gap_f: f32 = @floatFromInt(gap);
+
+        var box = dvui.box(@src(), .{ .dir = if (is_horizontal) .horizontal else .vertical }, .{
+            .expand = .horizontal,
+            .id_extra = 80_000 + node_id,
+        });
+        defer box.deinit();
+
+        for (node.children, 0..) |child, i| {
+            renderPanelNodeContent(child, selected_index, flat_index, node_serial);
+            if (i + 1 < node.children.len and gap > 0) {
+                _ = dvui.spacer(@src(), .{ .min_size_content = if (is_horizontal) .{ .w = gap_f } else .{ .h = gap_f } });
+            }
         }
     }
 
