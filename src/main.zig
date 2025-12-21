@@ -129,17 +129,6 @@ fn handleTrayFrame() ?dvui.App.Result {
     return null;
 }
 
-fn handleKeyboardFrame() !?dvui.App.Result {
-    const kb_result = try keyboard.handleEvents();
-    if (kb_result == .close) {
-        return .close;
-    } else if (kb_result == .hide) {
-        hideWindow();
-        return .ok;
-    }
-    return null;
-}
-
 fn handleCommandExecutionFrame() void {
     if (!state.command_execute) return;
     state.command_execute = false;
@@ -343,7 +332,7 @@ fn handleDetailsPanelTransitionsFrame() void {
 // Executed every frame to draw UI
 pub fn AppFrame() !dvui.App.Result {
     if (handleTrayFrame()) |res| return res;
-    if (try handleKeyboardFrame()) |res| return res;
+    if (try keyboard.handleKeyboardFrame(hideWindow)) |res| return res;
 
     // Main container with padding
     var main_box = dvui.box(@src(), .{ .dir = .vertical }, .{

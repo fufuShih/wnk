@@ -9,6 +9,19 @@ pub const KeyboardResult = enum {
     hide,
 };
 
+pub const HideWindowFn = *const fn () void;
+
+pub fn handleKeyboardFrame(hideWindow: HideWindowFn) !?dvui.App.Result {
+    const kb_result = try handleEvents();
+    if (kb_result == .close) {
+        return .close;
+    } else if (kb_result == .hide) {
+        hideWindow();
+        return .ok;
+    }
+    return null;
+}
+
 pub fn handleEvents() !KeyboardResult {
     const evt = dvui.events();
     for (evt) |*e| {
