@@ -100,6 +100,10 @@ pub const main = struct {
         var item_box = regions.main.beginItemRow(.{ .id_extra = id_extra, .is_selected = is_selected });
         defer item_box.deinit();
 
+        if (is_selected and !state.action_prompt_active) {
+            dvui.scrollTo(.{ .screen_rect = item_box.data().rectScale().r });
+        }
+
         var text_box = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .id_extra = id_extra });
         defer text_box.deinit();
 
@@ -282,4 +286,3 @@ pub const bottom = struct {
         return defaultHint();
     }
 };
-

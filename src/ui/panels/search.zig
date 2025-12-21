@@ -93,6 +93,10 @@ pub const main = struct {
         var item_box = regions.main.beginItemRow(.{ .id_extra = id_extra, .is_selected = is_selected });
         defer item_box.deinit();
 
+        if (is_selected) {
+            dvui.scrollTo(.{ .screen_rect = item_box.data().rectScale().r });
+        }
+
         dvui.label(@src(), "{s}", .{icon}, .{ .font = dvui.Font.theme(.title), .id_extra = id_extra });
         _ = dvui.spacer(@src(), .{ .min_size_content = .{ .w = 12 }, .id_extra = id_extra + 1000 });
 
