@@ -6,6 +6,7 @@ const SDLBackend = @import("sdl-backend");
 const state = @import("state");
 const runtime = @import("runtime");
 const tray = @import("tray");
+const context = @import("context");
 
 const keyboard = @import("ui/keyboard.zig");
 const search = @import("ui/search.zig");
@@ -21,6 +22,7 @@ var last_panel: state.Panel = state.default_panel;
 var runtime_host: runtime.RuntimeHost = .{};
 var tray_icon: ?tray.TrayIcon = null;
 var sdl_window_ptr: ?*SDLBackend.c.SDL_Window = null;
+var context_manager: context.Manager = .{};
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
 
@@ -117,6 +119,15 @@ fn handleTrayFrame() ?dvui.App.Result {
         icon.checkTrayMessages();
 
         if (icon.pollEvents()) {
+            if (runtime_host.isActive()) {
+                context_manager.captureAndSend(allocator, &runtime_host);
+                const query = state.search_buffer[0..state.search_len];
+                _ = runtime_host.sendQuery(query);
+                last_query_hash = std.hash.Wyhash.hash(0, query);
+                last_query_change_ms = std.time.milliTimestamp();
+                state.ipc.results_pending = true;
+            }
+
             state.resetPanels();
             state.focus_on_results = false;
             dvui.focusWidget(null, null, null);

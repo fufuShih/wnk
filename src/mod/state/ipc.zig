@@ -6,6 +6,7 @@ pub const PluginResultItem = struct {
     title: []const u8,
     subtitle: ?[]const u8 = null,
     icon: ?[]const u8 = null,
+    contextual: ?bool = null,
 };
 
 pub const PluginResultsPayload = struct {

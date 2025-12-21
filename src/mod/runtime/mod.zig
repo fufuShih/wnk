@@ -15,6 +15,14 @@ pub const Error = error{
 pub const PollResult = enum { ok, closed };
 pub const MessageHandler = *const fn (allocator: std.mem.Allocator, line: []const u8) void;
 
+pub const HostContext = struct {
+    selectionText: ?[]const u8 = null,
+    selectionSource: ?[]const u8 = null,
+    windowTitle: ?[]const u8 = null,
+    appId: ?[]const u8 = null,
+    timestampMs: ?i64 = null,
+};
+
 pub const RuntimeProcess = struct {
     backend: Backend,
     inner: union(Backend) {
@@ -83,6 +91,20 @@ pub const RuntimeProcess = struct {
         switch (self.inner) {
             .bun => |*p| {
                 p.sendGetPanel(plugin_id, item_id) catch |err| return mapError(err);
+            },
+        }
+    }
+
+    pub fn sendContext(self: *RuntimeProcess, ctx: HostContext) Error!void {
+        switch (self.inner) {
+            .bun => |*p| {
+                p.sendContext(.{
+                    .selectionText = ctx.selectionText,
+                    .selectionSource = ctx.selectionSource,
+                    .windowTitle = ctx.windowTitle,
+                    .appId = ctx.appId,
+                    .timestampMs = ctx.timestampMs,
+                }) catch |err| return mapError(err);
             },
         }
     }
@@ -177,6 +199,17 @@ pub const RuntimeHost = struct {
         if (self.process) |*p| {
             p.sendGetPanel(plugin_id, item_id) catch |err| {
                 logSendError("request panel", err);
+                return false;
+            };
+            return true;
+        }
+        return false;
+    }
+
+    pub fn sendContext(self: *RuntimeHost, ctx: HostContext) bool {
+        if (self.process) |*p| {
+            p.sendContext(ctx) catch |err| {
+                logSendError("send context", err);
                 return false;
             };
             return true;

@@ -79,6 +79,7 @@ const NIM_DELETE: u32 = 0x00000002;
 
 const WM_APP: u32 = 0x8000;
 const WM_TRAYICON: u32 = WM_APP + 1;
+const WM_TRAY_EXIT: u32 = WM_APP + 2;
 const WM_LBUTTONUP: u32 = 0x0202;
 const WM_RBUTTONUP: u32 = 0x0205;
 const WM_CONTEXTMENU: u32 = 0x007B;
@@ -89,6 +90,7 @@ const WM_KEYDOWN: usize = 0x0100;
 const WM_KEYUP: usize = 0x0101;
 const WM_SYSKEYDOWN: usize = 0x0104;
 const WM_SYSKEYUP: usize = 0x0105;
+const PM_REMOVE: u32 = 0x0001;
 
 const MOD_ALT: u32 = 0x0001;
 const MOD_CONTROL: u32 = 0x0002;
@@ -126,6 +128,10 @@ extern "user32" fn DestroyMenu(hMenu: ?*anyopaque) callconv(.{ .x86_64_win = .{}
 extern "user32" fn GetCursorPos(lpPoint: *POINT) callconv(.{ .x86_64_win = .{} }) i32;
 extern "user32" fn SetForegroundWindow(hWnd: ?*anyopaque) callconv(.{ .x86_64_win = .{} }) i32;
 extern "user32" fn PostMessageW(hWnd: ?*anyopaque, Msg: u32, wParam: usize, lParam: isize) callconv(.{ .x86_64_win = .{} }) i32;
+extern "user32" fn PeekMessageW(lpMsg: *MSG, hWnd: ?*anyopaque, wMsgFilterMin: u32, wMsgFilterMax: u32, wRemoveMsg: u32) callconv(.{ .x86_64_win = .{} }) i32;
+extern "user32" fn GetMessageW(lpMsg: *MSG, hWnd: ?*anyopaque, wMsgFilterMin: u32, wMsgFilterMax: u32) callconv(.{ .x86_64_win = .{} }) i32;
+extern "user32" fn TranslateMessage(lpMsg: *const MSG) callconv(.{ .x86_64_win = .{} }) i32;
+extern "user32" fn DispatchMessageW(lpMsg: *const MSG) callconv(.{ .x86_64_win = .{} }) isize;
 extern "user32" fn RegisterClassExW(lpWndClass: *const WNDCLASSEXW) callconv(.{ .x86_64_win = .{} }) u16;
 extern "user32" fn CreateWindowExW(dwExStyle: u32, lpClassName: [*:0]const u16, lpWindowName: ?[*:0]const u16, dwStyle: u32, X: i32, Y: i32, nWidth: i32, nHeight: i32, hWndParent: ?*anyopaque, hMenu: ?*anyopaque, hInstance: ?*anyopaque, lpParam: ?*anyopaque) callconv(.{ .x86_64_win = .{} }) ?*anyopaque;
 extern "user32" fn DestroyWindow(hWnd: ?*anyopaque) callconv(.{ .x86_64_win = .{} }) i32;
@@ -138,10 +144,25 @@ var g_signals: signals.TraySignals = .{};
 var g_app_hwnd: ?*anyopaque = null;
 var g_hotkey_hook: ?*anyopaque = null;
 var g_alt_space_down: bool = false;
+var g_sdl_wake_event_type: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
+
+const TrayInitState = enum(u8) {
+    pending = 0,
+    ready = 1,
+    failed = 2,
+};
+
+const TrayThreadState = struct {
+    status: std.atomic.Value(u8) = std.atomic.Value(u8).init(@intFromEnum(TrayInitState.pending)),
+    msg_hwnd: ?*anyopaque = null,
+    init_error: ?anyerror = null,
+};
+
+var g_tray_state: TrayThreadState = .{};
 
 pub const TrayIcon = struct {
-    nid: NOTIFYICONDATAW,
     msg_hwnd: ?*anyopaque,
+    thread: std.Thread,
 
     pub fn init(sdl_window: *SDLBackend.c.SDL_Window) !TrayIcon {
         const SDL_PROP_WINDOW_WIN32_HWND_POINTER = "SDL.window.win32.hwnd";
@@ -151,52 +172,34 @@ pub const TrayIcon = struct {
             null,
         );
 
-        const hinstance = GetModuleHandleW(null);
-        const msg_hwnd = try createMessageOnlyWindow(hinstance);
+        g_signals.reset();
+        ensureWakeEventRegistered();
 
-        var szTip: [128]u16 = [_]u16{0} ** 128;
-        const tooltip = std.unicode.utf8ToUtf16LeStringLiteral("wnk Launcher");
-        @memcpy(szTip[0..tooltip.len], tooltip);
+        g_tray_state.msg_hwnd = null;
+        g_tray_state.init_error = null;
+        g_tray_state.status.store(@intFromEnum(TrayInitState.pending), .release);
 
-        var nid = NOTIFYICONDATAW{
-            .cbSize = @sizeOf(NOTIFYICONDATAW),
-            .hWnd = msg_hwnd,
-            .uID = 1,
-            .uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP,
-            .uCallbackMessage = WM_TRAYICON,
-            .hIcon = LoadIconW(null, IDI_APPLICATION),
-            .szTip = szTip,
-            .dwState = 0,
-            .dwStateMask = 0,
-            .szInfo = [_]u16{0} ** 256,
-            .uTimeout = 0,
-            .szInfoTitle = [_]u16{0} ** 64,
-            .dwInfoFlags = 0,
-            .guidItem = std.mem.zeroes(GUID),
-            .hBalloonIcon = null,
-        };
+        const thread = try std.Thread.spawn(.{}, trayThreadMain, .{&g_tray_state});
 
-        if (Shell_NotifyIconW(NIM_ADD, &nid) == 0) {
-            return error.FailedToCreateTrayIcon;
+        while (g_tray_state.status.load(.acquire) == @intFromEnum(TrayInitState.pending)) {
+            std.Thread.sleep(5 * std.time.ns_per_ms);
         }
 
-        registerHotkey(msg_hwnd);
+        if (g_tray_state.status.load(.acquire) == @intFromEnum(TrayInitState.failed)) {
+            thread.join();
+            return g_tray_state.init_error orelse error.FailedToCreateTrayIcon;
+        }
 
-        g_signals.reset();
-
-        return TrayIcon{ .nid = nid, .msg_hwnd = msg_hwnd };
+        return TrayIcon{ .msg_hwnd = g_tray_state.msg_hwnd, .thread = thread };
     }
 
     pub fn deinit(self: *TrayIcon) void {
         if (self.msg_hwnd) |hwnd| {
-            _ = UnregisterHotKey(hwnd, HOTKEY_ID_SHOW);
-        }
-        uninstallAltSpaceHook();
-        _ = Shell_NotifyIconW(NIM_DELETE, &self.nid);
-        if (self.msg_hwnd) |hwnd| {
-            _ = DestroyWindow(hwnd);
+            _ = PostMessageW(hwnd, WM_TRAY_EXIT, 0, 0);
             self.msg_hwnd = null;
         }
+        self.thread.join();
+        g_app_hwnd = null;
     }
 
     pub fn pollEvents(self: *TrayIcon) bool {
@@ -254,11 +257,15 @@ fn showContextMenu(hwnd: ?*anyopaque) void {
 
 fn requestShow() void {
     g_signals.requestShow();
-    showAppWindow();
+    postWakeEvent();
+    if (g_app_hwnd) |app_hwnd| {
+        _ = PostMessageW(app_hwnd, WM_NULL, 0, 0);
+    }
 }
 
 fn requestExit() void {
     g_signals.requestExit();
+    postWakeEvent();
     if (g_app_hwnd) |app_hwnd| {
         _ = PostMessageW(app_hwnd, WM_CLOSE, 0, 0);
     }
@@ -314,12 +321,89 @@ fn createMessageOnlyWindow(hinstance: ?*anyopaque) !?*anyopaque {
     return hwnd;
 }
 
+fn ensureWakeEventRegistered() void {
+    if (g_sdl_wake_event_type.load(.acquire) != 0) return;
+    const t: u32 = SDLBackend.c.SDL_RegisterEvents(1);
+    if (t != 0) g_sdl_wake_event_type.store(t, .release);
+}
+
+fn postWakeEvent() void {
+    const t = g_sdl_wake_event_type.load(.acquire);
+    if (t == 0) return;
+    var evt: SDLBackend.c.SDL_Event = undefined;
+    @memset(std.mem.asBytes(&evt), 0);
+    evt.type = t;
+    _ = SDLBackend.c.SDL_PushEvent(&evt);
+}
+
+fn trayThreadMain(ctx: *TrayThreadState) void {
+    const hinstance = GetModuleHandleW(null);
+    const msg_hwnd = createMessageOnlyWindow(hinstance) catch |err| {
+        ctx.init_error = err;
+        ctx.status.store(@intFromEnum(TrayInitState.failed), .release);
+        return;
+    };
+
+    ctx.msg_hwnd = msg_hwnd;
+
+    var szTip: [128]u16 = [_]u16{0} ** 128;
+    const tooltip = std.unicode.utf8ToUtf16LeStringLiteral("wnk Launcher");
+    @memcpy(szTip[0..tooltip.len], tooltip);
+
+    var nid = NOTIFYICONDATAW{
+        .cbSize = @sizeOf(NOTIFYICONDATAW),
+        .hWnd = msg_hwnd,
+        .uID = 1,
+        .uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP,
+        .uCallbackMessage = WM_TRAYICON,
+        .hIcon = LoadIconW(null, IDI_APPLICATION),
+        .szTip = szTip,
+        .dwState = 0,
+        .dwStateMask = 0,
+        .szInfo = [_]u16{0} ** 256,
+        .uTimeout = 0,
+        .szInfoTitle = [_]u16{0} ** 64,
+        .dwInfoFlags = 0,
+        .guidItem = std.mem.zeroes(GUID),
+        .hBalloonIcon = null,
+    };
+
+    if (Shell_NotifyIconW(NIM_ADD, &nid) == 0) {
+        ctx.init_error = error.FailedToCreateTrayIcon;
+        ctx.status.store(@intFromEnum(TrayInitState.failed), .release);
+        _ = DestroyWindow(msg_hwnd);
+        return;
+    }
+
+    registerHotkey(msg_hwnd);
+    ctx.status.store(@intFromEnum(TrayInitState.ready), .release);
+
+    var msg: MSG = undefined;
+    while (GetMessageW(&msg, null, 0, 0) != 0) {
+        if (msg.message == WM_TRAY_EXIT) break;
+        _ = TranslateMessage(&msg);
+        _ = DispatchMessageW(&msg);
+    }
+
+    if (msg_hwnd) |hwnd| {
+        _ = UnregisterHotKey(hwnd, HOTKEY_ID_SHOW);
+    }
+    uninstallAltSpaceHook();
+    _ = Shell_NotifyIconW(NIM_DELETE, &nid);
+    _ = DestroyWindow(msg_hwnd);
+}
+
 fn registerHotkey(hwnd: ?*anyopaque) void {
-    if (RegisterHotKey(hwnd, HOTKEY_ID_SHOW, MOD_ALT | MOD_NOREPEAT, VK_SPACE) == 0) {
-        const err = GetLastError();
-        std.debug.print("Warning: Alt+Space failed (error: {}), installing hook\n", .{err});
-        if (!installAltSpaceHook()) {
-            std.debug.print("Warning: Alt+Space hook failed (error: {}), trying Ctrl+Alt+Space\n", .{GetLastError()});
+    const hotkey_ok = RegisterHotKey(hwnd, HOTKEY_ID_SHOW, MOD_ALT | MOD_NOREPEAT, VK_SPACE) != 0;
+    if (!hotkey_ok) {
+        std.debug.print("Warning: Alt+Space failed (error: {}), installing hook\n", .{GetLastError()});
+    }
+
+    const hook_ok = installAltSpaceHook();
+    if (!hook_ok) {
+        std.debug.print("Warning: Alt+Space hook failed (error: {})\n", .{GetLastError()});
+        if (!hotkey_ok) {
+            std.debug.print("Warning: trying Ctrl+Alt+Space\n", .{});
             if (RegisterHotKey(hwnd, HOTKEY_ID_SHOW, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_SPACE) == 0) {
                 std.debug.print("Warning: Ctrl+Alt+Space also failed (error: {})\n", .{GetLastError()});
             }

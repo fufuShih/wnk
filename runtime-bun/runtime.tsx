@@ -1,14 +1,14 @@
 import { handleHostEvent, type HostEvent } from './lib';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createElement, Fragment, isValidElement, type ReactNode } from 'react';
-import type { ActionItem, PanelData, ResultItem as PluginResultItem } from './sdk/ipc';
+import type { ActionItem, HostContext, PanelData, ResultItem as PluginResultItem } from './sdk/ipc';
 import type { RenderPayload, SerializedNode } from './sdk/types';
 import { panelFromReactNode, panelFromSerializedRoot, type RenderedPanel } from './lib/panel';
 import { loadPlugins, type LoadedPlugin } from './lib/load-plugins';
 
 declare const process: any;
 
-type ResultItem = { pluginId: string; id?: string; title: string; subtitle?: string; icon?: string };
+type ResultItem = { pluginId: string; id?: string; title: string; subtitle?: string; icon?: string; contextual?: boolean };
 
 
 function writeJson(obj: object): void {
@@ -35,6 +35,16 @@ function isRenderPayload(value: unknown): value is RenderPayload {
     !Array.isArray(value) &&
     (value as any).version === 1 &&
     'root' in (value as any);
+}
+
+function parseHostContext(msg: any): HostContext {
+  const ctx: HostContext = {};
+  if (typeof msg.selectionText === 'string') ctx.selectionText = msg.selectionText;
+  if (typeof msg.selectionSource === 'string') ctx.selectionSource = msg.selectionSource;
+  if (typeof msg.windowTitle === 'string') ctx.windowTitle = msg.windowTitle;
+  if (typeof msg.appId === 'string') ctx.appId = msg.appId;
+  if (typeof msg.timestampMs === 'number' && Number.isFinite(msg.timestampMs)) ctx.timestampMs = msg.timestampMs;
+  return ctx;
 }
 
 function normalizePanelReactNode(node: ReactNode): ReactNode {
@@ -77,6 +87,7 @@ let latestQueryToken = 0;
 let latestPanelToken = 0;
 const lastDetailsItemByPlugin = new Map<string, string>();
 const actionsCache = new Map<string, ActionItem[]>();
+let lastContext: HostContext = {};
 
 let stdinBuffer = '';
 const stdinQueue: string[] = [];
@@ -94,7 +105,9 @@ async function drainStdinQueue(): Promise<void> {
       let msg: any;
       try { msg = JSON.parse(line); } catch { continue; }
 
-      if (msg.type === 'query') {
+      if (msg.type === 'context') {
+        lastContext = parseHostContext(msg);
+      } else if (msg.type === 'query') {
         const token = ++latestQueryToken;
         const text = msg.text ?? '';
         const byPlugin = new Map<string, ResultItem[]>();
@@ -111,7 +124,7 @@ async function drainStdinQueue(): Promise<void> {
         for (const p of plugins) {
           void (async () => {
             try {
-              const itemsRaw = await p.mod.getResults(text);
+              const itemsRaw = await p.mod.getResults(text, lastContext);
               if (token !== latestQueryToken) return;
 
               const items: ResultItem[] = (itemsRaw ?? []).map((it) => ({
@@ -120,6 +133,7 @@ async function drainStdinQueue(): Promise<void> {
                 title: it.title,
                 subtitle: it.subtitle,
                 icon: it.icon ?? p.manifest.icon,
+                contextual: it.contextual,
               }));
 
               byPlugin.set(p.manifest.id, items);
@@ -228,6 +242,7 @@ async function drainStdinQueue(): Promise<void> {
                 selectedId: selectedId || undefined,
                 selectedText: selectedText || undefined,
                 query: query || undefined,
+                hostContext: lastContext,
               });
               writeJson({ type: 'actions', token, pluginId, items: items ?? [] });
               return;
@@ -276,6 +291,9 @@ function setupStdinListener(): void {
   });
 
   process.stdin.on('end', () => process.exit(0));
+  if (typeof process.stdin.resume === 'function') {
+    process.stdin.resume();
+  }
 }
 
 setupStdinListener();

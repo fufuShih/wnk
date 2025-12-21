@@ -5,6 +5,8 @@
 This directory contains Zig modules imported by the host executable via `build.zig`.
 
 ## Modules
+- `src/mod/context/` - host context capture pipeline (selection, app metadata)
+- `src/mod/selection/` - OS selection capture (platform-specific)
 - `src/mod/state/` - global state, navigation, and Bun IPC payload parsing
 - `src/mod/tray/` - system tray integration (Windows-focused)
 

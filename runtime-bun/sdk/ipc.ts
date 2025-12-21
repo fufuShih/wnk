@@ -3,6 +3,7 @@ export type ResultItem = {
   title: string;
   subtitle?: string;
   icon?: string;
+  contextual?: boolean;
 };
 
 export type PanelItem = {
@@ -19,6 +20,14 @@ export type ActionItem = {
   close_on_execute?: boolean;
   host_only?: boolean;
   input?: { placeholder?: string; initial?: string };
+};
+
+export type HostContext = {
+  selectionText?: string;
+  selectionSource?: 'os' | 'clipboard' | string;
+  windowTitle?: string;
+  appId?: string;
+  timestampMs?: number;
 };
 
 export type PanelTop =

@@ -12,15 +12,16 @@ pub fn currentQuery() []const u8 {
     return state.search_buffer[0..state.search_len];
 }
 
-fn matchesSearch(result_title: []const u8, result_subtitle: []const u8, query: []const u8) bool {
+fn matchesSearch(result_title: []const u8, result_subtitle: []const u8, query: []const u8, contextual: bool) bool {
+    if (contextual) return true;
     if (query.len == 0) return true;
     return text_utils.containsIgnoreCase(result_title, query) or
         text_utils.containsIgnoreCase(result_subtitle, query);
 }
 
 /// Convenience helper for renderers: checks whether an item matches the current query.
-pub fn matchesCurrentQuery(result_title: []const u8, result_subtitle: []const u8) bool {
-    return matchesSearch(result_title, result_subtitle, currentQuery());
+pub fn matchesCurrentQuery(result_title: []const u8, result_subtitle: []const u8, contextual: bool) bool {
+    return matchesSearch(result_title, result_subtitle, currentQuery(), contextual);
 }
 
 fn visibleResultsCount(query: []const u8) usize {
@@ -30,12 +31,12 @@ fn visibleResultsCount(query: []const u8) usize {
         for (p.value.items) |item| {
             const title = item.title;
             const subtitle = item.subtitle orelse "";
-            if (matchesSearch(title, subtitle, query)) visible_count += 1;
+            if (matchesSearch(title, subtitle, query, item.contextual orelse false)) visible_count += 1;
         }
     }
 
     for (state.example_results) |result| {
-        if (matchesSearch(result.title, result.subtitle, query)) visible_count += 1;
+        if (matchesSearch(result.title, result.subtitle, query, false)) visible_count += 1;
     }
 
     return visible_count;
@@ -65,7 +66,7 @@ pub fn getSelectedItem() ?SelectedItem {
         for (p.value.items) |item| {
             const title = item.title;
             const subtitle = item.subtitle orelse "";
-            if (!matchesSearch(title, subtitle, query)) continue;
+            if (!matchesSearch(title, subtitle, query, item.contextual orelse false)) continue;
 
             if (display_index == state.selected_index) {
                 return .{ .plugin = item };
@@ -75,7 +76,7 @@ pub fn getSelectedItem() ?SelectedItem {
     }
 
     for (state.example_results) |result| {
-        if (!matchesSearch(result.title, result.subtitle, query)) continue;
+        if (!matchesSearch(result.title, result.subtitle, query, false)) continue;
         if (display_index == state.selected_index) {
             return .{ .mock = result };
         }

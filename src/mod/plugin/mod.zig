@@ -113,6 +113,15 @@ pub const BunProcess = struct {
         itemId: []const u8,
     };
 
+    pub const ContextMsg = struct {
+        type: []const u8 = "context",
+        selectionText: ?[]const u8 = null,
+        selectionSource: ?[]const u8 = null,
+        windowTitle: ?[]const u8 = null,
+        appId: ?[]const u8 = null,
+        timestampMs: ?i64 = null,
+    };
+
     pub const GetActionsMsg = struct {
         type: []const u8 = "getActions",
         token: u64,
@@ -133,6 +142,7 @@ pub const BunProcess = struct {
         query: QueryMsg,
         command: CommandMsg,
         getPanel: GetPanelMsg,
+        context: ContextMsg,
         getActions: GetActionsMsg,
     };
 
@@ -141,6 +151,7 @@ pub const BunProcess = struct {
             .query => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
             .command => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
             .getPanel => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
+            .context => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
             .getActions => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
         };
         defer self.allocator.free(json_line);
@@ -157,6 +168,10 @@ pub const BunProcess = struct {
 
     pub fn sendGetPanel(self: *BunProcess, plugin_id: []const u8, item_id: []const u8) !void {
         try self.sendMessage(.{ .getPanel = .{ .pluginId = plugin_id, .itemId = item_id } });
+    }
+
+    pub fn sendContext(self: *BunProcess, msg: ContextMsg) !void {
+        try self.sendMessage(.{ .context = msg });
     }
 
     pub fn sendGetActions(

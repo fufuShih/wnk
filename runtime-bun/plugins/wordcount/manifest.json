@@ -1,0 +1,6 @@
+{
+  "id": "wordcount",
+  "name": "Word Count",
+  "icon": "WC",
+  "entry": "./dist/bundle.js"
+}

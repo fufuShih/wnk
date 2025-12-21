@@ -66,7 +66,7 @@ pub const main = struct {
             for (p.value.items, 0..) |item, i| {
                 const title = item.title;
                 const subtitle = item.subtitle orelse "";
-                if (!search.matchesCurrentQuery(title, subtitle)) continue;
+                if (!search.matchesCurrentQuery(title, subtitle, item.contextual orelse false)) continue;
 
                 const is_selected = state.focus_on_results and display_index == state.selected_index;
                 const id_extra: usize = 10_000 + i;
@@ -79,7 +79,7 @@ pub const main = struct {
 
         // Static mock results.
         for (state.example_results, 0..) |result, i| {
-            if (!search.matchesCurrentQuery(result.title, result.subtitle)) continue;
+            if (!search.matchesCurrentQuery(result.title, result.subtitle, false)) continue;
 
             const is_selected = state.focus_on_results and display_index == state.selected_index;
             const id_extra: usize = 1_000 + i;

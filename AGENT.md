@@ -19,6 +19,7 @@ Host -> Bun
 - `{ "type": "query", "text": "..." }`
 - `{ "type": "getPanel", "pluginId": "...", "itemId": "..." }`
 - `{ "type": "command", "name": "...", "text": "..." }`
+- `{ "type": "context", "selectionText": "...", "selectionSource": "os", "timestampMs": 123 }`
 - `{ "type": "getActions", "token": 1, "panel": "search" | "details", "pluginId": "...", "itemId": "...", "selectedId": "...", "selectedText": "...", "query": "..." }`
 
 Bun -> Host

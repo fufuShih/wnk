@@ -16,6 +16,8 @@ src/
   main.zig           - App init, frame loop, panel transitions
   plugin.zig         - Bun IPC (stdin/stdout JSON protocol)
   mod/
+    context/         - Host context capture pipeline (selection, app metadata)
+    selection/       - OS selection capture (platform-specific)
     state/           - Global state + IPC payload parsing
     tray/            - System tray integration
   ui/

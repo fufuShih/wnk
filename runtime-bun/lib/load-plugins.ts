@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { type ReactNode } from 'react';
-import type { ActionItem, PanelData, ResultItem as PluginResultItem } from '../sdk/ipc';
+import type { ActionItem, HostContext, PanelData, ResultItem as PluginResultItem } from '../sdk/ipc';
 
 type PluginManifest = {
   id: string;
@@ -10,7 +10,7 @@ type PluginManifest = {
 };
 
 type PluginModule = {
-  getResults: (query: string) => PluginResultItem[] | Promise<PluginResultItem[]>;
+  getResults: (query: string, ctx?: HostContext) => PluginResultItem[] | Promise<PluginResultItem[]>;
   getPanel?: (itemId: string) => PanelData | ReactNode | null | Promise<PanelData | ReactNode | null>;
   getActions?: (ctx: {
     panel: 'search' | 'details';
@@ -19,6 +19,7 @@ type PluginModule = {
     selectedId?: string;
     selectedText?: string;
     query?: string;
+    hostContext?: HostContext;
   }) => ActionItem[] | Promise<ActionItem[]>;
   onCommand?: (name: string, text: string) => PanelData | ReactNode | null | void | Promise<PanelData | ReactNode | null | void>;
 };

@@ -3,6 +3,8 @@
 // Host supplies the input via query; we return list items.
 // ============================================
 
+import type { HostContext } from '@wnk/sdk';
+
 export type ResultItem = { title: string; subtitle?: string; icon?: string };
 
 type Token =
@@ -153,15 +155,17 @@ function tryEvaluate(expr: string): number | null {
   return evalRpn(rpn);
 }
 
-export function getResults(query: string): ResultItem[] {
+export function getResults(query: string, ctx?: HostContext): ResultItem[] {
   const trimmed = query.trim();
-  if (!trimmed) return [];
+  const selection = ctx?.selectionText?.trim() ?? '';
+  const input = trimmed.length > 0 ? trimmed : selection;
+  if (!input) return [];
 
-  const value = tryEvaluate(trimmed);
+  const value = tryEvaluate(input);
   if (value === null) return [];
 
   const title = String(value);
-  const subtitle = `${trimmed} = ${title}`;
+  const subtitle = `${input} = ${title}`;
   return [{ title, subtitle, icon: '=' }];
 }
 
