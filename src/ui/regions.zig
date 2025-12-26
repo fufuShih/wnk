@@ -110,12 +110,12 @@ pub const main = struct {
                 }
 
                 if (c + 1 < cols and gap > 0) {
-                    _ = dvui.spacer(@src(), .{ .min_size_content = .{ .w = gap } });
+                    _ = dvui.spacer(@src(), .{ .min_size_content = .{ .w = gap }, .id_extra = 90_000 + idx });
                 }
             }
 
             if (gap > 0) {
-                _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = gap } });
+                _ = dvui.spacer(@src(), .{ .min_size_content = .{ .h = gap }, .id_extra = 100_000 + i });
             }
         }
     }
