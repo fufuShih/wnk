@@ -61,6 +61,10 @@ pub fn build(b: *std.Build) void {
         tray_module.linkFramework("Foundation", .{});
         tray_module.linkFramework("CoreGraphics", .{}); // Input monitoring / (optional) event tap APIs
         tray_module.linkFramework("CoreFoundation", .{}); // CFRunLoop utilities
+        selection_module.linkFramework("ApplicationServices", .{});
+        selection_module.linkFramework("AppKit", .{});
+        selection_module.linkFramework("Foundation", .{});
+        selection_module.linkFramework("CoreFoundation", .{});
     }
 
     // Add imports to the executable's root module

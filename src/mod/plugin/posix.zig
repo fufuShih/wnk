@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn readAvailableIntoPending(self: anytype) !void {
+pub fn readAvailableIntoPending(self: anytype) error{ ReadFailed, EndOfStream, OutOfMemory }!void {
     var tmp: [4096]u8 = undefined;
     var fds = [_]std.posix.pollfd{
         .{
