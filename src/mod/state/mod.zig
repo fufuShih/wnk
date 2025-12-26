@@ -23,11 +23,13 @@ pub var search_initialized = false;
 
 pub var nav: nav_mod.Navigation = .{};
 
-pub fn resetPanels() void {
-    nav.resetPanels();
-    clearDetailsPluginId();
-    clearDetailsItemId();
-    ipc.clearActionsData();
+fn copyTruncated(dest: []u8, src: []const u8) usize {
+    const n = @min(src.len, dest.len);
+    @memcpy(dest[0..n], src[0..n]);
+    return n;
+}
+
+fn resetActionPromptState() void {
     action_prompt_active = false;
     action_prompt_close_on_execute = true;
     action_prompt_host_only = false;
@@ -36,6 +38,14 @@ pub fn resetPanels() void {
     action_prompt_placeholder_len = 0;
     @memset(&action_prompt_buffer, 0);
     action_prompt_len = 0;
+}
+
+pub fn resetPanels() void {
+    nav.resetPanels();
+    clearDetailsPluginId();
+    clearDetailsItemId();
+    ipc.clearActionsData();
+    resetActionPromptState();
 }
 
 pub fn currentPanel() Panel {
@@ -123,13 +133,8 @@ pub var details_item_id: [256]u8 = undefined;
 pub var details_item_id_len: usize = 0;
 
 pub fn setSelectedItemInfo(title: []const u8, subtitle: []const u8) void {
-    const t_len = @min(title.len, selected_item_title.len);
-    @memcpy(selected_item_title[0..t_len], title[0..t_len]);
-    selected_item_title_len = t_len;
-
-    const s_len = @min(subtitle.len, selected_item_subtitle.len);
-    @memcpy(selected_item_subtitle[0..s_len], subtitle[0..s_len]);
-    selected_item_subtitle_len = s_len;
+    selected_item_title_len = copyTruncated(selected_item_title[0..], title);
+    selected_item_subtitle_len = copyTruncated(selected_item_subtitle[0..], subtitle);
 }
 
 pub fn getSelectedItemTitle() []const u8 {
@@ -141,9 +146,7 @@ pub fn getSelectedItemSubtitle() []const u8 {
 }
 
 pub fn setDetailsPluginId(plugin_id: []const u8) void {
-    const n = @min(plugin_id.len, details_plugin_id.len);
-    @memcpy(details_plugin_id[0..n], plugin_id[0..n]);
-    details_plugin_id_len = n;
+    details_plugin_id_len = copyTruncated(details_plugin_id[0..], plugin_id);
 }
 
 pub fn clearDetailsPluginId() void {
@@ -155,9 +158,7 @@ pub fn getDetailsPluginId() []const u8 {
 }
 
 pub fn setDetailsItemId(item_id: []const u8) void {
-    const n = @min(item_id.len, details_item_id.len);
-    @memcpy(details_item_id[0..n], item_id[0..n]);
-    details_item_id_len = n;
+    details_item_id_len = copyTruncated(details_item_id[0..], item_id);
 }
 
 pub fn clearDetailsItemId() void {
@@ -193,26 +194,14 @@ pub fn init(allocator: std.mem.Allocator) void {
     resetPanels();
     command_selected_index = 0;
     command_execute = false;
-    action_prompt_active = false;
-    action_prompt_close_on_execute = true;
-    action_prompt_host_only = false;
-    action_prompt_command_name_len = 0;
-    action_prompt_title_len = 0;
-    action_prompt_placeholder_len = 0;
-    @memset(&action_prompt_buffer, 0);
-    action_prompt_len = 0;
 
     selected_item_title_len = 0;
     selected_item_subtitle_len = 0;
-    details_plugin_id_len = 0;
-    details_item_id_len = 0;
 }
 
 pub fn setSearchText(text: []const u8) void {
-    const n: usize = @min(text.len, search_buffer.len);
     @memset(&search_buffer, 0);
-    @memcpy(search_buffer[0..n], text[0..n]);
-    search_len = n;
+    search_len = copyTruncated(search_buffer[0..], text);
 }
 
 pub fn deinit() void {
@@ -254,8 +243,9 @@ pub fn handleBunMessage(allocator: std.mem.Allocator, json_str: []const u8) void
     const obj = parsed_any.value.object;
     const type_val = obj.get("type") orelse return;
     if (type_val != .string) return;
+    const msg_type = type_val.string;
 
-    if (std.mem.eql(u8, type_val.string, "results")) {
+    if (std.mem.eql(u8, msg_type, "results")) {
         ipc.updatePluginResults(allocator, json_str) catch {};
         // Keep focus keyboard-driven: results updates should not steal focus from the search input.
         // Reset selection so the first result is ready when the user switches focus to main.
@@ -263,7 +253,7 @@ pub fn handleBunMessage(allocator: std.mem.Allocator, json_str: []const u8) void
         return;
     }
 
-    if (std.mem.eql(u8, type_val.string, "panel")) {
+    if (std.mem.eql(u8, msg_type, "panel")) {
         ipc.updatePanelData(allocator, json_str) catch {};
         // If the action overlay is open in plugin details, refresh actions to reflect updates.
         if (nav.action_open and currentPanel() == .details and details_plugin_id_len > 0) {
@@ -272,12 +262,12 @@ pub fn handleBunMessage(allocator: std.mem.Allocator, json_str: []const u8) void
         return;
     }
 
-    if (std.mem.eql(u8, type_val.string, "actions")) {
+    if (std.mem.eql(u8, msg_type, "actions")) {
         ipc.updateActionsData(allocator, json_str) catch {};
         return;
     }
 
-    if (!std.mem.eql(u8, type_val.string, "effect")) return;
+    if (!std.mem.eql(u8, msg_type, "effect")) return;
 
     const Effect = struct {
         type: []const u8,

@@ -63,15 +63,14 @@ pub const BunProcess = struct {
 
     fn popLineFromPending(self: *BunProcess) !?[]const u8 {
         const pending = self.pending_buffer.items;
-        const idx_opt = std.mem.indexOfScalar(u8, pending, '\n');
-        if (idx_opt == null) return null;
-        const idx = idx_opt.?;
+        const idx = std.mem.indexOfScalar(u8, pending, '\n') orelse return null;
+
+        const line = pending[0..idx];
+        const trimmed = if (line.len > 0 and line[line.len - 1] == '\r') line[0 .. line.len - 1] else line;
 
         self.read_buffer.clearRetainingCapacity();
-        if (idx > 0) {
-            var end = idx;
-            if (end > 0 and pending[end - 1] == '\r') end -= 1;
-            try self.read_buffer.appendSlice(self.allocator, pending[0..end]);
+        if (trimmed.len > 0) {
+            try self.read_buffer.appendSlice(self.allocator, trimmed);
         }
 
         const consume = idx + 1;
@@ -148,11 +147,7 @@ pub const BunProcess = struct {
 
     pub fn sendMessage(self: *BunProcess, msg: HostMessage) !void {
         const json_line = switch (msg) {
-            .query => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
-            .command => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
-            .getPanel => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
-            .context => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
-            .getActions => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
+            inline else => |m| try std.json.Stringify.valueAlloc(self.allocator, m, .{}),
         };
         defer self.allocator.free(json_line);
         try self.sendEvent(json_line);
