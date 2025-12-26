@@ -10,8 +10,12 @@ pub const Manager = struct {
             .timestampMs = std.time.milliTimestamp(),
         };
 
-        if (selection.capture(allocator) catch null) |sel| {
-            defer selection.free(allocator, sel);
+        const sel_opt = selection.capture(allocator) catch null;
+        defer {
+            if (sel_opt) |sel| selection.free(allocator, sel);
+        }
+
+        if (sel_opt) |sel| {
             ctx.selectionText = sel.text;
             ctx.selectionSource = selection.sourceTag(sel.source);
         }
